@@ -57,8 +57,12 @@ export const deleteProject = (projectId: string) =>
   request<void>(`/projects/${projectId}`, { method: 'DELETE' });
 
 // Filesystem
-export const pickDirectory = () =>
-  request<{ path?: string; cancelled?: boolean; error?: string }>('/filesystem/pick-directory', { method: 'POST' });
+export const pickDirectory = async (): Promise<{ path?: string; cancelled?: boolean; error?: string }> => {
+  if (window.electronAPI?.pickDirectory) {
+    return window.electronAPI.pickDirectory();
+  }
+  return request('/filesystem/pick-directory', { method: 'POST' });
+};
 
 // Logs
 export interface LogResponse {

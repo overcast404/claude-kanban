@@ -7,19 +7,20 @@
   },
   "scripts": {
     "dev": "concurrently \"tsx watch src/cli.ts --dev --no-open\" \"cd client && vite --port 14568\"",
-    "dev:electron": "concurrently \"tsx src/cli.ts --dev --no-open\" \"cd client && vite --port 14568\" \"env -u ELECTRON_RUN_AS_NODE electron dist/electron/main.js\"",
+    "dev:electron": "concurrently \"tsx src/cli.ts --dev --no-open\" \"cd client && vite --port 14568\" \"cross-env VITE_DEV_SERVER_URL=http://localhost:14568 env -u ELECTRON_RUN_AS_NODE electron dist/electron/main.js\"",
     "build": "tsc && cd client && vite build",
     "build:electron": "node scripts/build-electron.mjs",
     "build:all": "npm run build && npm run build:electron",
     "start": "node dist/cli.js",
     "start:electron": "env -u ELECTRON_RUN_AS_NODE electron dist/electron/main.js",
     "pack": "npm run build:all && electron-builder --dir",
-    "dist": "npm run build:all && electron-builder",
+    "pack:portable": "npm run build:all && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --win portable",
+    "dist": "npm run build:all && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder",
     "prepack": "npm run build"
   },
   "main": "dist/electron/main.js",
   "dependencies": {
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^12.9.0",
     "cors": "^2.8.5",
     "express": "^4.19.0",
     "uuid": "^9.0.0",
@@ -36,7 +37,8 @@
     "@types/ws": "^8.5.0",
     "@vitejs/plugin-react": "^4.3.0",
     "concurrently": "^8.2.0",
-    "electron": "^42.0.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.5.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
     "react": "^18.3.0",
@@ -62,12 +64,15 @@
     },
     "files": [
       "dist/**/*",
-      "node_modules/**/*",
       "package.json"
     ],
-    "npmRebuild": false,
+    "npmRebuild": true,
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false
     },
     "mac": {
       "target": "dmg"
