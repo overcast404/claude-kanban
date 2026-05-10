@@ -60,6 +60,13 @@ export const deleteProject = (projectId: string) =>
 export const pickDirectory = (): Promise<{ path?: string; cancelled?: boolean; error?: string }> =>
   request('/filesystem/pick-directory', { method: 'POST' });
 
+// Network
+export interface NetworkInfo {
+  lanUrls: string[];
+  port: number;
+}
+export const fetchNetworkInfo = () => request<NetworkInfo>('/network-info');
+
 // Logs
 export interface LogResponse {
   text: string;
