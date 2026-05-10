@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+server/
+shared/
+release/
+*.tsbuildinfo
+
+# Data
+dev-data/
+*.db
+*.db-shm
+*.db-wal
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Claude Code
+.claude/worktrees/
+.claude/plans/
+.claude/scheduled_tasks.json
+.superpowers/
+.playwright-mcp/
