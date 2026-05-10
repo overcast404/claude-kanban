@@ -39,25 +39,6 @@ export function createApp(config: AppConfig) {
 
   const server = http.createServer(app);
 
-  const wss = new WebSocketServer({ server });
-  const clients = new Set<WebSocket>();
-
-  wss.on('connection', (ws) => {
-    clients.add(ws);
-    ws.on('close', () => clients.delete(ws));
-  });
-
-  const broadcast = (msg: WsMessage): void => {
-    const data = JSON.stringify(msg);
-    for (const ws of clients) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(data);
-    }
-  };
-
-  setBroadcast(broadcast);
-
-  initDatabase();
-
   return new Promise<{ server: http.Server; url: string }>((resolve, reject) => {
     server.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
@@ -67,6 +48,24 @@ export function createApp(config: AppConfig) {
       }
     });
     server.listen(port, () => {
+      const wss = new WebSocketServer({ server });
+      const clients = new Set<WebSocket>();
+
+      wss.on('connection', (ws) => {
+        clients.add(ws);
+        ws.on('close', () => clients.delete(ws));
+      });
+
+      const broadcast = (msg: WsMessage): void => {
+        const data = JSON.stringify(msg);
+        for (const ws of clients) {
+          if (ws.readyState === WebSocket.OPEN) ws.send(data);
+        }
+      };
+
+      setBroadcast(broadcast);
+      initDatabase();
+
       resolve({ server, url: `http://localhost:${port}` });
     });
   });

@@ -1,24 +1,15 @@
 {
   "name": "claude-kanban",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code multi-task kanban management panel",
   "bin": {
     "ck": "./dist/cli.js"
   },
   "scripts": {
     "dev": "concurrently \"tsx watch src/cli.ts --dev --no-open\" \"cd client && vite --port 14568\"",
-    "dev:electron": "concurrently \"tsx src/cli.ts --dev --no-open\" \"cd client && vite --port 14568\" \"cross-env VITE_DEV_SERVER_URL=http://localhost:14568 env -u ELECTRON_RUN_AS_NODE electron dist/electron/main.js\"",
     "build": "tsc && cd client && vite build",
-    "build:electron": "node scripts/build-electron.mjs",
-    "build:all": "npm run build && npm run build:electron",
-    "start": "node dist/cli.js",
-    "start:electron": "env -u ELECTRON_RUN_AS_NODE electron dist/electron/main.js",
-    "pack": "npm run build:all && electron-builder --dir",
-    "pack:portable": "npm run build:all && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --win portable",
-    "dist": "npm run build:all && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder",
-    "prepack": "npm run build"
+    "start": "node dist/cli.js"
   },
-  "main": "dist/electron/main.js",
   "dependencies": {
     "better-sqlite3": "^12.9.0",
     "cors": "^2.8.5",
@@ -37,10 +28,6 @@
     "@types/ws": "^8.5.0",
     "@vitejs/plugin-react": "^4.3.0",
     "concurrently": "^8.2.0",
-    "cross-env": "^10.1.0",
-    "electron": "^41.5.0",
-    "electron-builder": "^26.8.1",
-    "esbuild": "^0.28.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "tailwindcss": "^4.3.0",
@@ -55,33 +42,5 @@
     "dist",
     "!dist/*.tsbuildinfo"
   ],
-  "private": false,
-  "build": {
-    "appId": "com.claude-kanban.app",
-    "productName": "Claude Kanban",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "package.json"
-    ],
-    "npmRebuild": true,
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "signAndEditExecutable": false
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
-    },
-    "asarUnpack": [
-      "node_modules/better-sqlite3/**"
-    ]
-  }
+  "private": false
 }

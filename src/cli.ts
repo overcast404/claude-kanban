@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import path from 'path';
+import fs from 'fs';
 import os from 'os';
+import { execFile, execSync } from 'child_process';
 import { createApp } from './index';
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -45,6 +47,41 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
   return args;
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function killExistingProcess(pidFile: string) {
+  try {
+    const pidStr = fs.readFileSync(pidFile, 'utf-8').trim();
+    const pid = parseInt(pidStr, 10);
+    if (!pid || pid === process.pid) return;
+
+    console.log('Stopping existing instance...');
+
+    if (process.platform === 'win32') {
+      execSync(`taskkill /PID ${pid} /F /T >nul 2>&1`, { stdio: 'ignore' });
+    } else {
+      try { process.kill(pid, 'SIGTERM'); } catch {}
+    }
+
+    await sleep(500);
+  } catch {
+    // PID file doesn't exist, process already gone, or kill failed
+  }
+}
+
+function writePidFile(pidFile: string) {
+  try {
+    fs.mkdirSync(path.dirname(pidFile), { recursive: true });
+    fs.writeFileSync(pidFile, String(process.pid));
+  } catch {}
+}
+
+function removePidFile(pidFile: string) {
+  try { fs.unlinkSync(pidFile); } catch {}
+}
+
 async function main() {
   const argv = parseArgs(process.argv.slice(2));
 
@@ -55,7 +92,12 @@ async function main() {
   const staticDir = path.join(__dirname, 'public');
   const openBrowser = argv.open !== false;
 
+  const pidFile = path.join(dataDir, 'server.pid');
+  await killExistingProcess(pidFile);
+
   const { server, url } = await createApp({ port, dataDir, staticDir });
+
+  writePidFile(pidFile);
 
   console.log(`\n  Claude Kanban is running at:`);
   console.log(`  > Local:   ${url}`);
@@ -63,7 +105,6 @@ async function main() {
   console.log(`\n  Press Ctrl+C to stop.\n`);
 
   if (openBrowser && !argv.dev) {
-    const { execFile } = await import('child_process');
     if (process.platform === 'darwin') {
       execFile('open', [url]);
     } else if (process.platform === 'win32') {
@@ -75,6 +116,7 @@ async function main() {
 
   const shutdown = () => {
     console.log('\nShutting down...');
+    removePidFile(pidFile);
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5000);
   };

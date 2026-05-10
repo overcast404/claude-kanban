@@ -56,13 +56,9 @@ export const deleteTask = (taskId: string) =>
 export const deleteProject = (projectId: string) =>
   request<void>(`/projects/${projectId}`, { method: 'DELETE' });
 
-// Filesystem
-export const pickDirectory = async (): Promise<{ path?: string; cancelled?: boolean; error?: string }> => {
-  if (window.electronAPI?.pickDirectory) {
-    return window.electronAPI.pickDirectory();
-  }
-  return request('/filesystem/pick-directory', { method: 'POST' });
-};
+// Filesystem — 服务端调用系统原生目录选择器 (osascript/PowerShell/zenity)
+export const pickDirectory = (): Promise<{ path?: string; cancelled?: boolean; error?: string }> =>
+  request('/filesystem/pick-directory', { method: 'POST' });
 
 // Logs
 export interface LogResponse {

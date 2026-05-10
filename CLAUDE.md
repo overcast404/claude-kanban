@@ -5,30 +5,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 开发命令
 
 ```bash
-# Web 模式
 npm run dev           # server (tsx watch, :14567) + client (Vite, :14568)
 npm run build         # tsc src/ → dist/ + vite build client/ → dist/public/
 npm run start         # node dist/cli.js
-
-# Electron 桌面应用模式
-npm run dev:electron  # server + client + Electron 三进程并行
-npm run build:electron # esbuild 编译 client/electron/ → dist/electron/
-npm run build:all     # build + build:electron
-npm run start:electron # 生产模式启动 Electron 窗口
-npm run pack          # build:all + electron-builder --dir
-npm run dist          # build:all + electron-builder (安装包)
 ```
 
 开发时 client 在 `:14568`，Vite 自动代理 `/api` 和 `/ws` 到 server `:14567`。
 
 ## 架构概览
 
-双模式应用：CLI Web 模式 + Electron 桌面模式，共享同一套后端和前端。
+纯 CLI 工具：`ck` 命令启动 Express 服务器，自动打开浏览器访问看板。
 
 ```
 src/                    # 服务端 (Express + WebSocket + SQLite)
   cli.ts                # CLI 入口 (bin: ck)，解析参数启动 createApp()
-  index.ts              # createApp() → Express app，被 CLI 和 Electron 共用
+  index.ts              # createApp() → Express app
   db.ts                 # SQLite (better-sqlite3, WAL 模式)
   types.ts              # 共享类型 (Project, Task, Decision, WsMessage)
   broadcast.ts          # WebSocket 广播
@@ -38,21 +29,8 @@ src/                    # 服务端 (Express + WebSocket + SQLite)
 
 client/                 # React 18 + Vite 5 + Tailwind 4
   src/                  # 前端源码
-  electron/             # Electron 主进程 + preload (独立 tsconfig)
-    main.ts             # BrowserWindow + 嵌入 Express server
-    preload.ts          # contextBridge 暴露 electronAPI.platform
   vite.config.ts        # base: './', 代理 /api 和 /ws 到后端
-
-scripts/
-  build-electron.mjs    # esbuild 两步编译: main.ts + preload.ts → dist/electron/
 ```
-
-### Electron 模式 vs Web 模式
-
-- **Web 模式**: CLI 启动 Express，自动打开浏览器
-- **Electron 模式**: `main.ts` 直接调用 `createApp()` 在 Electron 内启动服务器，BrowserWindow 加载前端。开发时从 `VITE_DEV_SERVER_URL` 加载，生产时加载 `dist/public/index.html`
-- 数据目录：`app.getPath('userData') + '/data'`
-- `better-sqlite3` 是原生模块，electron-builder 配置了 `asarUnpack` 解包
 
 ### 任务生命周期
 
