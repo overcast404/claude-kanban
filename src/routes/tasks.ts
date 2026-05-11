@@ -243,7 +243,10 @@ tasksRouter.patch('/:id', (req: Request, res: Response) => {
 tasksRouter.delete('/:id', (req: Request, res: Response) => {
   stopSessionManager(req.params.id);
   const db = getDb();
+  const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id) as { project_id: string } | undefined;
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
-  broadcast({ type: 'task_deleted', payload: { id: req.params.id } });
+  broadcast({ type: 'task_deleted', payload: { id: req.params.id, project_id: task?.project_id } });
+  const logFile = path.join(getDataDir(), 'logs', `${req.params.id}.log`);
+  try { fs.unlinkSync(logFile); } catch {}
   res.status(204).send();
 });

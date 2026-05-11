@@ -117,6 +117,10 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
   let stdout = '';
   let stderr = '';
   let seqCounter = 0;
+  const logsDir = path.join(getDataDir(), 'logs');
+  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+  const logFile = path.join(logsDir, `${task.id}.log`);
+
   let pendingChunks: { stream: 'stdout' | 'stderr'; text: string }[] = [];
   let flushTimer: NodeJS.Timeout | null = null;
 
@@ -133,12 +137,14 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
         type: 'task_output',
         payload: { taskId: task.id, text: stderrText, stream: 'stderr', seq: seqCounter++ },
       });
+      fs.appendFileSync(logFile, stderrText);
     }
     if (stdoutText) {
       broadcast({
         type: 'task_output',
         payload: { taskId: task.id, text: stdoutText, stream: 'stdout', seq: seqCounter++ },
       });
+      fs.appendFileSync(logFile, stdoutText);
     }
   }
 
@@ -274,6 +280,10 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
   runningProcesses.set(taskId, proc);
 
   let resumeStdout = '';
+  const logsDir = path.join(getDataDir(), 'logs');
+  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+  const logFile = path.join(logsDir, `${taskId}.log`);
+
   let resumeSeqCounter = 0;
   let pendingChunks: { stream: 'stdout' | 'stderr'; text: string }[] = [];
   let flushTimer: NodeJS.Timeout | null = null;
@@ -291,12 +301,14 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
         type: 'task_output',
         payload: { taskId, text: stderrText, stream: 'stderr', seq: resumeSeqCounter++ },
       });
+      fs.appendFileSync(logFile, stderrText);
     }
     if (stdoutText) {
       broadcast({
         type: 'task_output',
         payload: { taskId, text: stdoutText, stream: 'stdout', seq: resumeSeqCounter++ },
       });
+      fs.appendFileSync(logFile, stdoutText);
     }
   }
 

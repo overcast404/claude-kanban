@@ -72,6 +72,7 @@ export default function App() {
         }));
         if (selectedTaskId === id) setSelectedTaskId(null);
       }
+      setTaskOutputs(prev => { const next = { ...prev }; delete next[id]; return next; });
       loadProjects();
     } else if (msg.type === 'project_deleted') {
       const { id } = msg.payload as { id: string };

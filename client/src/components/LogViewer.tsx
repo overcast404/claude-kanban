@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { fetchTaskLogs } from '../api';
 
 interface OutputEntry {
   stream: string;
@@ -111,14 +112,36 @@ function parseStream(lines: string[]): FormattedLine[] {
   return result;
 }
 
+async function loadAllLogs(taskId: string): Promise<string> {
+  let offset = 0;
+  let allText = '';
+  while (true) {
+    const res = await fetchTaskLogs(taskId, offset);
+    allText += res.text;
+    if (res.eof) break;
+    offset = res.offset;
+  }
+  return allText;
+}
+
 export function LogViewer({ taskId, taskTitle, taskStatus, liveOutputs, onClose }: Props) {
   const [autoScroll, setAutoScroll] = useState(true);
+  const [historicalText, setHistoricalText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (liveOutputs.length === 0) {
+      setLoading(true);
+      loadAllLogs(taskId).then(setHistoricalText).finally(() => setLoading(false));
+    }
+  }, [taskId, liveOutputs.length]);
+
   const formattedLines = useMemo(() => {
-    const allText = liveOutputs.map(e => e.text).join('');
-    return parseStream(allText.split('\n'));
-  }, [liveOutputs]);
+    const liveText = liveOutputs.map(e => e.text).join('');
+    const combined = (historicalText || '') + liveText;
+    return parseStream(combined.split('\n'));
+  }, [historicalText, liveOutputs]);
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
@@ -163,7 +186,11 @@ export function LogViewer({ taskId, taskTitle, taskStatus, liveOutputs, onClose 
         </div>
 
         <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto min-h-0 bg-warm-log-bg rounded-b-xl">
-          {formattedLines.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center h-full text-[13px] text-warm-text-secondary">
+              加载日志...
+            </div>
+          ) : formattedLines.length === 0 ? (
             <div className="flex items-center justify-center h-full text-[13px] text-warm-text-secondary">
               {taskStatus === 'running' ? '等待输出...' : '暂无输出日志'}
             </div>
