@@ -44,7 +44,9 @@ export function createApp(config: AppConfig) {
   return new Promise<{ server: http.Server; url: string }>((resolve, reject) => {
     server.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
-        reject(new Error(`Port ${port} is already in use. Use --port to specify a different port.`));
+        const err2 = new Error(`Port ${port} is already in use.`) as NodeJS.ErrnoException;
+        err2.code = 'EADDRINUSE';
+        reject(err2);
       } else {
         reject(err);
       }

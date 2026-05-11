@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev           # server (tsx watch, :14567) + client (Vite, :14568)
 npm run build         # tsc src/ → dist/ + vite build client/ → dist/public/
 npm run start         # node dist/cli.js
+npm run build && npm link  # 全局安装 ck 命令
 ```
 
 开发时 client 在 `:14568`，Vite 自动代理 `/api` 和 `/ws` 到 server `:14567`。
@@ -50,6 +51,10 @@ pending → running → deciding（Claude 提问）→ running（用户决策后
 ### WebSocket 广播
 
 消息类型: `task_updated`, `task_created`, `task_deleted`, `decision_created`, `decision_resolved`, `task_output`
+
+### 局域网访问
+
+`/api/network-info` 返回本机局域网 IPv4 地址，过滤虚拟网卡（Docker/vbox 等）。前端 QrCodeModal 组件展示二维码，方便手机扫码访问同一局域网下的看板。
 
 ### CLI 参数
 

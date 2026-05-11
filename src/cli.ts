@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import http from 'http';
 import { execFile, execSync } from 'child_process';
 import { createApp } from './index';
 
@@ -51,6 +52,38 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function findPortPid(port: number): number | null {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
+      const match = out.match(/LISTENING\s+(\d+)/);
+      return match ? parseInt(match[1], 10) : null;
+    } else {
+      const out = execSync(`lsof -ti :${port}`, { encoding: 'utf-8' });
+      const pid = parseInt(out.trim(), 10);
+      return pid || null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+function killPid(pid: number) {
+  if (process.platform === 'win32') {
+    execSync(`taskkill /PID ${pid} /F /T >nul 2>&1`, { stdio: 'ignore' });
+  } else {
+    try { process.kill(pid, 'SIGKILL'); } catch {}
+  }
+}
+
+async function killPortProcess(port: number) {
+  const pid = findPortPid(port);
+  if (!pid || pid === process.pid) return;
+  console.log(`Port ${port} is occupied by PID ${pid}, killing...`);
+  killPid(pid);
+  await sleep(500);
+}
+
 async function killExistingProcess(pidFile: string) {
   try {
     const pidStr = fs.readFileSync(pidFile, 'utf-8').trim();
@@ -95,7 +128,19 @@ async function main() {
   const pidFile = path.join(dataDir, 'server.pid');
   await killExistingProcess(pidFile);
 
-  const { server, url } = await createApp({ port, dataDir, staticDir });
+  let server: http.Server;
+  let url: string;
+
+  try {
+    ({ server, url } = await createApp({ port, dataDir, staticDir }));
+  } catch (err: any) {
+    if (err?.code === 'EADDRINUSE') {
+      await killPortProcess(port);
+      ({ server, url } = await createApp({ port, dataDir, staticDir }));
+    } else {
+      throw err;
+    }
+  }
 
   writePidFile(pidFile);
 
