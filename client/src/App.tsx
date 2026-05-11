@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, Task, Decision, WsMessage, TaskOutputPayload, TaskStatus } from '../../src/types';
 import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject } from './api';
 import { useWebSocket } from './useWebSocket';
@@ -34,6 +34,11 @@ export default function App() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [decidingTask, setDecidingTask] = useState<Task | null>(null);
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
+
+  const [detailVisible, setDetailVisible] = useState(true);
+  const [detailWidth, setDetailWidth] = useState(50);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const resizingRef = useRef(false);
 
   const loadProjects = useCallback(async () => {
     const ps = await listProjects();
@@ -90,6 +95,30 @@ export default function App() {
     }
   }, [loadProjects, selectedTaskId]));
 
+  useEffect(() => {
+    if (selectedTaskId) setDetailVisible(true);
+  }, [selectedTaskId]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const percent = ((rect.right - e.clientX) / rect.width) * 100;
+      setDetailWidth(Math.min(70, Math.max(20, percent)));
+    };
+    const handleMouseUp = () => {
+      resizingRef.current = false;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   const handleRefresh = (projectId?: string) => {
     if (projectId) {
       loadTasks(projectId);
@@ -129,52 +158,69 @@ export default function App() {
           }}
         />
       ) : (
-        <ListPanel
-          activeTab={activeTab}
-          tasksByProject={tasksByProject}
-          projectNames={projectNames}
-          selectedTaskId={selectedTaskId}
-          onSelectTask={(task) => setSelectedTaskId(task.id)}
-          onCreateTask={() => setShowCreateTask(true)}
-        />
-      )}
-
-      {activeTab !== 'projects' && (
-        <DetailPanel
-          task={selectedTask}
-          projectName={selectedTask ? (projectNames[selectedTask.project_id] || '') : ''}
-          logs={selectedTask ? (taskOutputs[selectedTask.id] || []) : []}
-          onStart={async () => {
-            if (selectedTask) {
-              await startTask(selectedTask.id);
-              handleRefresh(selectedTask.project_id);
-            }
-          }}
-          onStop={async () => {
-            if (selectedTask) {
-              await stopTask(selectedTask.id);
-              handleRefresh(selectedTask.project_id);
-            }
-          }}
-          onContinue={async () => {
-            if (selectedTask) {
-              await continueTask(selectedTask.id);
-              handleRefresh(selectedTask.project_id);
-            }
-          }}
-          onEdit={() => selectedTask && setEditingTask(selectedTask)}
-          onDelete={async () => {
-            if (selectedTask && confirm(`确定删除任务 "${selectedTask.title}"？`)) {
-              await deleteTask(selectedTask.id);
-              setSelectedTaskId(null);
-              handleRefresh(selectedTask.project_id);
-            }
-          }}
-          onDecide={() => selectedTask && setDecidingTask(selectedTask)}
-          onApprove={() => selectedTask && setReviewingTask(selectedTask)}
-          onReject={() => selectedTask && setReviewingTask(selectedTask)}
-          onViewLogs={() => selectedTask && setViewingLogs(selectedTask)}
-        />
+        <div ref={containerRef} className="flex-1 flex overflow-hidden">
+          <div style={{ width: detailVisible ? `${100 - detailWidth}%` : '100%' }} className="min-w-0">
+            <ListPanel
+              activeTab={activeTab}
+              tasksByProject={tasksByProject}
+              projectNames={projectNames}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={(task) => { setSelectedTaskId(task.id); setDetailVisible(true); }}
+              onCreateTask={() => setShowCreateTask(true)}
+            />
+          </div>
+          {detailVisible && (
+            <>
+              <div
+                className="w-1.5 cursor-col-resize bg-warm-border hover:bg-warm-tan shrink-0 transition-colors"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  resizingRef.current = true;
+                  document.body.style.userSelect = 'none';
+                  document.body.style.cursor = 'col-resize';
+                }}
+              />
+              <div style={{ width: `${detailWidth}%` }} className="min-w-0">
+                <DetailPanel
+                  task={selectedTask}
+                  projectName={selectedTask ? (projectNames[selectedTask.project_id] || '') : ''}
+                  logs={selectedTask ? (taskOutputs[selectedTask.id] || []) : []}
+                  onStart={async () => {
+                    if (selectedTask) {
+                      await startTask(selectedTask.id);
+                      handleRefresh(selectedTask.project_id);
+                    }
+                  }}
+                  onStop={async () => {
+                    if (selectedTask) {
+                      await stopTask(selectedTask.id);
+                      handleRefresh(selectedTask.project_id);
+                    }
+                  }}
+                  onContinue={async () => {
+                    if (selectedTask) {
+                      await continueTask(selectedTask.id);
+                      handleRefresh(selectedTask.project_id);
+                    }
+                  }}
+                  onEdit={() => selectedTask && setEditingTask(selectedTask)}
+                  onDelete={async () => {
+                    if (selectedTask && confirm(`确定删除任务 "${selectedTask.title}"？`)) {
+                      await deleteTask(selectedTask.id);
+                      setSelectedTaskId(null);
+                      handleRefresh(selectedTask.project_id);
+                    }
+                  }}
+                  onDecide={() => selectedTask && setDecidingTask(selectedTask)}
+                  onApprove={() => selectedTask && setReviewingTask(selectedTask)}
+                  onReject={() => selectedTask && setReviewingTask(selectedTask)}
+                  onViewLogs={() => selectedTask && setViewingLogs(selectedTask)}
+                  onClose={() => setDetailVisible(false)}
+                />
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {showCreateTask && (

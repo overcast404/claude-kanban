@@ -17,22 +17,34 @@ interface Props {
   onApprove: () => void;
   onReject: () => void;
   onViewLogs: () => void;
+  onClose: () => void;
 }
 
-export function DetailPanel({ task, projectName, logs, ...actions }: Props) {
+export function DetailPanel({ task, projectName, logs, onClose, ...actions }: Props) {
   if (!task) {
     return (
-      <div className="w-[360px] flex-shrink-0 border-l border-warm-border bg-warm-card flex items-center justify-center">
+      <div className="h-full border-l border-warm-border bg-warm-card flex items-center justify-center">
         <EmptyState icon="👈" message="选择一个任务查看详情" />
       </div>
     );
   }
 
   return (
-    <div className="w-[360px] flex-shrink-0 border-l border-warm-border bg-warm-card overflow-y-auto">
+    <div className="h-full border-l border-warm-border bg-warm-card overflow-y-auto">
       <div className="p-4">
         <div className="mb-4">
-          <h2 className="text-[15px] font-bold text-warm-text mb-1">{task.title}</h2>
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="text-[15px] font-bold text-warm-text mb-1">{task.title}</h2>
+            <button
+              onClick={onClose}
+              className="text-warm-text-secondary hover:text-warm-text p-0.5 rounded shrink-0"
+              title="关闭详情"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </button>
+          </div>
           <div className="flex items-center gap-2 text-[11px] text-warm-text-secondary">
             <span>📁 {projectName}</span>
             <span>{STATUS_ICON[task.status]} {STATUS_LABEL[task.status]}</span>
