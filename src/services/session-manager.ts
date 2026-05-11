@@ -110,7 +110,6 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     cwd: workingDir,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: true,
   });
 
   runningProcesses.set(task.id, proc);
@@ -270,7 +269,6 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
   const proc = spawn('claude', args, {
     cwd: workingDir,
     stdio: 'pipe',
-    shell: true,
   });
 
   runningProcesses.set(taskId, proc);
