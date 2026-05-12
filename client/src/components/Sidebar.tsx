@@ -42,20 +42,19 @@ export function Sidebar({ activeTab, counts, onSelectTab }: Props) {
             onClick={() => onSelectTab(item.tab)}
           />
         ))}
-        <div className="mt-auto">
-          <NavItem
-            icon="folder"
-            label="项目"
-            active={activeTab === 'projects'}
-            onClick={() => onSelectTab('projects')}
-          />
-          <NavItem
-            icon="smartphone"
-            label="扫码"
-            active={false}
-            onClick={() => setShowQr(true)}
-          />
-        </div>
+        <hr className="w-8 border-warm-border" />
+        <NavItem
+          icon="folder"
+          label="项目"
+          active={activeTab === 'projects'}
+          onClick={() => onSelectTab('projects')}
+        />
+        <NavItem
+          icon="smartphone"
+          label="扫码"
+          active={false}
+          onClick={() => setShowQr(true)}
+        />
       </aside>
       {showQr && <QrCodeModal onClose={() => setShowQr(false)} />}
     </>
