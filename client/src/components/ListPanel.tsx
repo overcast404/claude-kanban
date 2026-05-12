@@ -1,11 +1,11 @@
-import type { Task, TaskStatus } from '../../../src/types';
+import type { Task } from '../../../src/types';
 import { ProjectGroup } from './ProjectGroup';
 import { EmptyState } from './EmptyState';
-import { STATUS_LABEL, STATUS_ICON, ACTION_LABEL, ACTION_ICON, ACTION_STATUSES } from '../status';
+import { TABS, type TabKey } from '../status';
 import { Icon } from './Icon';
 
 interface Props {
-  activeTab: 'action' | TaskStatus;
+  activeTab: TabKey;
   tasksByProject: Record<string, Task[]>;
   projectNames: Record<string, string>;
   selectedTaskId: string | null;
@@ -17,10 +17,10 @@ export function ListPanel({
   activeTab, tasksByProject, projectNames,
   selectedTaskId, onSelectTask, onCreateTask,
 }: Props) {
-  const statuses = activeTab === 'action' ? ACTION_STATUSES : [activeTab];
-  const isAction = activeTab === 'action';
-  const icon = isAction ? ACTION_ICON : STATUS_ICON[activeTab];
-  const label = isAction ? ACTION_LABEL : STATUS_LABEL[activeTab];
+  const tab = TABS.find(t => t.key === activeTab);
+  const statuses = tab?.statuses || [];
+  const icon = tab?.icon || 'folder';
+  const label = tab?.label || '';
 
   const filtered = Object.entries(tasksByProject).filter(
     ([, tasks]) => tasks.some(t => statuses.includes(t.status))
@@ -32,7 +32,7 @@ export function ListPanel({
         <h2 className="text-sm font-bold text-warm-text inline-flex items-center gap-1">
           <Icon name={icon} size={16} /> {label}
         </h2>
-        {(activeTab === 'pending' || activeTab === 'running') && (
+        {activeTab === 'in-progress' && (
           <button
             onClick={onCreateTask}
             className="text-[11px] bg-warm-brown text-white px-3 py-1.5 rounded-lg font-bold hover:bg-warm-brown-hover transition-colors inline-flex items-center gap-1"
