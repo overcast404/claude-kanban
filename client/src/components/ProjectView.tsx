@@ -1,5 +1,6 @@
 import type { Project } from '../../../src/types';
 import { EmptyState } from './EmptyState';
+import { Icon } from './Icon';
 
 interface ProjectWithTaskCounts {
   id: string;
@@ -23,7 +24,7 @@ export function ProjectView({ projects, onCreate, onDelete }: Props) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-warm-border flex-shrink-0">
-        <h2 className="text-sm font-bold text-warm-text">📁 项目</h2>
+        <h2 className="text-sm font-bold text-warm-text inline-flex items-center gap-1"><Icon name="folder" size={16} /> 项目</h2>
         <button
           onClick={onCreate}
           className="text-[11px] bg-warm-brown text-white px-3 py-1.5 rounded-lg font-bold hover:bg-warm-brown-hover transition-colors"
@@ -34,7 +35,7 @@ export function ProjectView({ projects, onCreate, onDelete }: Props) {
 
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {projects.length === 0 ? (
-          <EmptyState icon="📁" message="还没有项目，点击上方按钮创建" />
+          <EmptyState icon="folder" message="还没有项目，点击上方按钮创建" />
         ) : (
           <div className="flex flex-col gap-2.5">
             {projects.map(p => (
@@ -52,11 +53,8 @@ export function ProjectView({ projects, onCreate, onDelete }: Props) {
                     {p.count_running > 0 && (
                       <span className="text-[9px] bg-warm-border text-warm-brown px-1.5 py-0.5 rounded">{p.count_running}进行中</span>
                     )}
-                    {p.count_deciding > 0 && (
-                      <span className="text-[9px] bg-warm-danger-bg text-warm-danger px-1.5 py-0.5 rounded">{p.count_deciding}待决策</span>
-                    )}
-                    {p.count_reviewing > 0 && (
-                      <span className="text-[9px] bg-warm-border text-warm-brown px-1.5 py-0.5 rounded">{p.count_reviewing}待验收</span>
+                    {(p.count_deciding + p.count_reviewing) > 0 && (
+                      <span className="text-[9px] bg-warm-danger-bg text-warm-danger px-1.5 py-0.5 rounded">{p.count_deciding + p.count_reviewing}待处理</span>
                     )}
                     {p.count_done > 0 && (
                       <span className="text-[9px] bg-warm-border text-warm-brown px-1.5 py-0.5 rounded">{p.count_done}已完成</span>

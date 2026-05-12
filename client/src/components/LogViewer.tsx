@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { fetchTaskLogs } from '../api';
+import { Icon } from './Icon';
 
 interface OutputEntry {
   stream: string;
@@ -175,7 +176,7 @@ export function LogViewer({ taskId, taskTitle, taskStatus, liveOutputs, onClose 
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-warm-border flex-shrink-0">
-          <h3 className="text-sm font-bold text-warm-text truncate">📋 日志 — {taskTitle}</h3>
+          <h3 className="text-sm font-bold text-warm-text truncate inline-flex items-center gap-1"><Icon name="clipboard" size={15} /> 日志 — {taskTitle}</h3>
           <div className="flex items-center gap-4 flex-shrink-0">
             <label className="flex items-center gap-1.5 text-[11px] text-warm-text-secondary cursor-pointer">
               <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} />

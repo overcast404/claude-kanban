@@ -1,3 +1,5 @@
+import { Icon } from './Icon';
+
 interface Props {
   lines: { stream: string; text: string }[];
   onViewFull: () => void;
@@ -9,7 +11,7 @@ export function LogPreview({ lines, onViewFull }: Props) {
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-2">
-        <h4 className="text-[11px] font-bold text-warm-brown">📝 最近日志</h4>
+        <h4 className="text-[11px] font-bold text-warm-brown inline-flex items-center gap-0.5"><Icon name="clipboard" size={13} /> 最近日志</h4>
         <button
           onClick={onViewFull}
           className="text-[10px] text-warm-tan hover:text-warm-brown transition-colors"

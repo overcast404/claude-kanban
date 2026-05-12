@@ -1,4 +1,5 @@
 import type { TaskStatus } from '../../src/types';
+import type { IconName } from './components/Icon';
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   pending: '待启动',
@@ -8,17 +9,21 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   done: '已完成',
 };
 
-export const STATUS_ICON: Record<TaskStatus, string> = {
-  pending: '📥',
-  running: '⚡',
-  deciding: '❓',
-  reviewing: '✅',
-  done: '📦',
+export const STATUS_ICON: Record<TaskStatus, IconName> = {
+  pending: 'inbox',
+  running: 'zap',
+  deciding: 'help-circle',
+  reviewing: 'check-circle',
+  done: 'archive',
 };
 
 export const STATUS_ORDER: TaskStatus[] = [
   'pending', 'running', 'deciding', 'reviewing', 'done',
 ];
+
+export const ACTION_LABEL = '待处理';
+export const ACTION_ICON: IconName = 'bell';
+export const ACTION_STATUSES: TaskStatus[] = ['deciding', 'reviewing'];
 
 export const PRIORITY_LABEL: Record<string, string> = {
   high: '高',

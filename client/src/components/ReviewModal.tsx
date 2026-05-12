@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Task } from '../../../src/types';
 import { approveTask, rejectTask } from '../api';
 import { Modal } from './Modal';
+import { Icon } from './Icon';
 
 interface Props {
   task: Task;
@@ -32,7 +33,7 @@ export function ReviewModal({ task, onClose, onResolved }: Props) {
   const isDone = task.status === 'done';
 
   return (
-    <Modal title={`${isDone ? '🏁 已完成' : '✅ 待验收'} — ${task.title}`} onClose={onClose}>
+    <Modal title={`${isDone ? '已完成' : '待验收'} — ${task.title}`} onClose={onClose}>
       {task.summary && (
         <div className="mb-3">
           <div className="text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">Claude 的完成摘要</div>
@@ -55,11 +56,11 @@ export function ReviewModal({ task, onClose, onResolved }: Props) {
         </div>
       ) : !showFeedback ? (
         <div className="flex justify-end gap-2">
-          <button onClick={() => setShowFeedback(true)} className="px-4 py-2 border border-warm-tan text-warm-brown rounded-lg text-xs font-semibold" disabled={submitting}>
-            ↩ 回复继续
+          <button onClick={() => setShowFeedback(true)} className="px-4 py-2 border border-warm-tan text-warm-brown rounded-lg text-xs font-semibold inline-flex items-center gap-1" disabled={submitting}>
+            <Icon name="corner-down-left" size={14} /> 回复继续
           </button>
-          <button onClick={handleApprove} className="px-4 py-2 bg-warm-brown text-white rounded-lg text-xs font-bold" disabled={submitting}>
-            ✓ 验收通过
+          <button onClick={handleApprove} className="px-4 py-2 bg-warm-brown text-white rounded-lg text-xs font-bold inline-flex items-center gap-1" disabled={submitting}>
+            <Icon name="check-circle" size={14} /> 验收通过
           </button>
         </div>
       ) : (

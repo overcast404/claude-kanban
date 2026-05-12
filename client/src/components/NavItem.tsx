@@ -1,5 +1,7 @@
+import { Icon, type IconName } from './Icon';
+
 interface Props {
-  icon: string;
+  icon: IconName;
   label: string;
   count?: number;
   active: boolean;
@@ -17,8 +19,8 @@ export function NavItem({ icon, label, count, active, dangerBadge, onClick }: Pr
           : 'text-warm-text-secondary hover:text-warm-brown'
       }`}
     >
-      <span className="text-lg relative">
-        {icon}
+      <span className="relative">
+        <Icon name={icon} size={22} />
         {count !== undefined && count > 0 && (
           <span
             className={`absolute -top-1 -right-3 min-w-[16px] h-4 text-[9px] leading-4 rounded-full px-1 text-white text-center ${

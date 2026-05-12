@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Task, Decision } from '../../../src/types';
 import { getTaskWithDecision, submitDecision } from '../api';
 import { Modal } from './Modal';
+import { Icon } from './Icon';
 
 interface Props {
   task: Task;
@@ -54,7 +55,7 @@ export function DecisionModal({ task, onClose, onResolved }: Props) {
   }
 
   return (
-    <Modal title={`❓ 待决策 — ${task.title}`} onClose={onClose} wide>
+    <Modal title={`待决策 — ${task.title}`} onClose={onClose} wide>
       {decision && (
         <>
           {decision.context && (
@@ -106,7 +107,7 @@ export function DecisionModal({ task, onClose, onResolved }: Props) {
               : 'border-warm-border hover:border-warm-tan'
           }`}
         >
-          <div className="text-[12px] font-semibold text-warm-text">✎ 自定义回答</div>
+          <div className="text-[12px] font-semibold text-warm-text inline-flex items-center gap-1"><Icon name="edit" size={14} /> 自定义回答</div>
           {selectedOption === 'other' && (
             <textarea
               value={otherText}

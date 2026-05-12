@@ -11,6 +11,7 @@ interface Props {
 export function TaskCard({ task, projectName, selected, onClick }: Props) {
   const isDone = task.status === 'done';
   const isDeciding = task.status === 'deciding';
+  const isReviewing = task.status === 'reviewing';
 
   return (
     <div
@@ -19,7 +20,7 @@ export function TaskCard({ task, projectName, selected, onClick }: Props) {
         selected
           ? 'border-warm-tan ring-1 ring-warm-tan'
           : 'border-warm-border hover:border-warm-tan'
-      } ${isDone ? 'opacity-60' : ''} ${isDeciding ? 'border-warm-danger border-dashed' : ''}`}
+      } ${isDone ? 'opacity-60' : ''} ${isDeciding ? 'border-warm-danger border-dashed' : ''} ${isReviewing ? 'border-l-[3px] border-l-warm-tan' : ''}`}
     >
       <div className={`text-[13px] font-bold text-warm-text mb-1 ${isDone ? 'line-through' : ''}`}>
         {task.title}

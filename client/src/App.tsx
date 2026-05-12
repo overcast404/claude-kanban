@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, Task, Decision, WsMessage, TaskOutputPayload, TaskStatus } from '../../src/types';
 import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject } from './api';
 import { useWebSocket } from './useWebSocket';
-import { Sidebar } from './components/Sidebar';
+import { Sidebar, type SidebarTab } from './components/Sidebar';
 import { ListPanel } from './components/ListPanel';
 import { DetailPanel } from './components/DetailPanel';
 import { ProjectView } from './components/ProjectView';
@@ -13,7 +13,7 @@ import { DecisionModal } from './components/DecisionModal';
 import { ReviewModal } from './components/ReviewModal';
 import { LogViewer } from './components/LogViewer';
 
-type Tab = 'projects' | TaskStatus;
+type Tab = 'projects' | 'action' | TaskStatus;
 
 type ProjectData = Project & {
   count_pending: number; count_running: number; count_deciding: number;
@@ -21,7 +21,7 @@ type ProjectData = Project & {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('pending');
+  const [activeTab, setActiveTab] = useState<Tab>('action');
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
   const [taskOutputs, setTaskOutputs] = useState<Record<string, { stream: string; text: string }[]>>({});

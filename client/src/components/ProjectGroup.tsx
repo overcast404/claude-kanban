@@ -1,5 +1,6 @@
 import type { Task } from '../../../src/types';
 import { TaskCard } from './TaskCard';
+import { Icon } from './Icon';
 
 interface Props {
   projectName: string;
@@ -14,7 +15,7 @@ export function ProjectGroup({ projectName, tasks, selectedTaskId, onSelectTask 
   return (
     <div className="mb-4">
       <h3 className="text-[11px] font-bold text-warm-brown uppercase tracking-wide mb-2">
-        📁 {projectName}
+        <Icon name="folder" size={13} /> {projectName}
       </h3>
       <div className="flex flex-col gap-1.5">
         {tasks.map(task => (
