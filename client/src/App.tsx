@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Project, Task, Decision, WsMessage, TaskOutputPayload, TaskStatus } from '../../src/types';
+import type { Project, Task, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
 import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject } from './api';
 import { useWebSocket } from './useWebSocket';
-import { Sidebar, type SidebarTab } from './components/Sidebar';
+import { TABS, type TabKey } from './status';
+import { Sidebar } from './components/Sidebar';
+import { BottomNav } from './components/BottomNav';
 import { TopBar } from './components/TopBar';
 import { ListPanel } from './components/ListPanel';
 import { DetailPanel } from './components/DetailPanel';
@@ -14,14 +16,26 @@ import { DecisionModal } from './components/DecisionModal';
 import { ReviewModal } from './components/ReviewModal';
 import { LogViewer } from './components/LogViewer';
 
-type Tab = 'projects' | 'action' | TaskStatus;
+type Tab = 'projects' | TabKey;
 
 type ProjectData = Project & {
   count_pending: number; count_running: number; count_deciding: number;
   count_reviewing: number; count_done: number;
 };
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [query]);
+  return matches;
+}
+
 export default function App() {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [activeTab, setActiveTab] = useState<Tab>('action');
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
@@ -29,7 +43,6 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [viewingLogs, setViewingLogs] = useState<Task | null>(null);
 
-  // Modal state
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -100,7 +113,9 @@ export default function App() {
     if (selectedTaskId) setDetailVisible(true);
   }, [selectedTaskId]);
 
+  // Desktop drag resize — skip on mobile
   useEffect(() => {
+    if (isMobile) return;
     const handleMouseMove = (e: MouseEvent) => {
       if (!resizingRef.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
@@ -118,7 +133,7 @@ export default function App() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [isMobile]);
 
   const handleRefresh = (projectId?: string) => {
     if (projectId) {
@@ -136,18 +151,71 @@ export default function App() {
   const projectNames: Record<string, string> = {};
   projects.forEach(p => { projectNames[p.id] = p.name; });
 
+  // Aggregate counts by tab instead of by status
   const counts: Record<string, number> = {};
-  allTasks.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
+  allTasks.forEach(t => {
+    const tab = TABS.find(tab => (tab.statuses as readonly string[]).includes(t.status));
+    if (tab) {
+      counts[tab.key] = (counts[tab.key] || 0) + 1;
+    }
+  });
+
+  const detailPanel = (
+    <DetailPanel
+      task={selectedTask}
+      projectName={selectedTask ? (projectNames[selectedTask.project_id] || '') : ''}
+      logs={selectedTask ? (taskOutputs[selectedTask.id] || []) : []}
+      isMobile={isMobile}
+      onStart={async () => {
+        if (selectedTask) {
+          await startTask(selectedTask.id);
+          handleRefresh(selectedTask.project_id);
+        }
+      }}
+      onStop={async () => {
+        if (selectedTask) {
+          await stopTask(selectedTask.id);
+          handleRefresh(selectedTask.project_id);
+        }
+      }}
+      onContinue={async () => {
+        if (selectedTask) {
+          await continueTask(selectedTask.id);
+          handleRefresh(selectedTask.project_id);
+        }
+      }}
+      onEdit={() => selectedTask && setEditingTask(selectedTask)}
+      onDelete={async () => {
+        if (selectedTask && confirm(`确定删除任务 "${selectedTask.title}"？`)) {
+          await deleteTask(selectedTask.id);
+          setSelectedTaskId(null);
+          handleRefresh(selectedTask.project_id);
+        }
+      }}
+      onDecide={() => selectedTask && setDecidingTask(selectedTask)}
+      onApprove={() => selectedTask && setReviewingTask(selectedTask)}
+      onReject={() => {}}
+      onRejectSubmitted={() => {
+        if (selectedTask) handleRefresh(selectedTask.project_id);
+      }}
+      onViewLogs={() => selectedTask && setViewingLogs(selectedTask)}
+      onClose={() => setDetailVisible(false)}
+    />
+  );
+
+  const handleSelectTab = (tab: 'projects') => {
+    setActiveTab(tab);
+  };
 
   return (
     <div ref={containerRef} className="flex h-screen overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <TopBar activeTab={activeTab} onSelectTab={setActiveTab} />
-        <div className="flex flex-1 overflow-hidden">
+        <TopBar activeTab={activeTab} onSelectTab={handleSelectTab} />
+        <div className="flex flex-1 overflow-hidden" style={isMobile ? { paddingBottom: '3.5rem' } : undefined}>
           <Sidebar
-            activeTab={activeTab}
+            activeTab={activeTab as TabKey}
             counts={counts}
-            onSelectTab={setActiveTab}
+            onSelectTab={setActiveTab as (tab: TabKey) => void}
           />
 
           {activeTab === 'projects' ? (
@@ -164,7 +232,7 @@ export default function App() {
           ) : (
             <div className="flex-1 min-w-0">
               <ListPanel
-                activeTab={activeTab}
+                activeTab={activeTab as TabKey}
                 tasksByProject={tasksByProject}
                 projectNames={projectNames}
                 selectedTaskId={selectedTaskId}
@@ -177,59 +245,31 @@ export default function App() {
       </div>
 
       {activeTab !== 'projects' && detailVisible && (
-        <>
-          <div
-            className="w-1.5 cursor-col-resize bg-warm-border hover:bg-warm-tan shrink-0 transition-colors"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              resizingRef.current = true;
-              document.body.style.userSelect = 'none';
-              document.body.style.cursor = 'col-resize';
-            }}
-          />
-          <div style={{ width: `${detailWidth}%` }} className="min-w-0">
-            <DetailPanel
-              task={selectedTask}
-              projectName={selectedTask ? (projectNames[selectedTask.project_id] || '') : ''}
-              logs={selectedTask ? (taskOutputs[selectedTask.id] || []) : []}
-              onStart={async () => {
-                if (selectedTask) {
-                  await startTask(selectedTask.id);
-                  handleRefresh(selectedTask.project_id);
-                }
+        isMobile ? (
+          detailPanel
+        ) : (
+          <>
+            <div
+              className="w-1.5 cursor-col-resize bg-warm-border hover:bg-warm-tan shrink-0 transition-colors"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                resizingRef.current = true;
+                document.body.style.userSelect = 'none';
+                document.body.style.cursor = 'col-resize';
               }}
-              onStop={async () => {
-                if (selectedTask) {
-                  await stopTask(selectedTask.id);
-                  handleRefresh(selectedTask.project_id);
-                }
-              }}
-              onContinue={async () => {
-                if (selectedTask) {
-                  await continueTask(selectedTask.id);
-                  handleRefresh(selectedTask.project_id);
-                }
-              }}
-              onEdit={() => selectedTask && setEditingTask(selectedTask)}
-              onDelete={async () => {
-                if (selectedTask && confirm(`确定删除任务 "${selectedTask.title}"？`)) {
-                  await deleteTask(selectedTask.id);
-                  setSelectedTaskId(null);
-                  handleRefresh(selectedTask.project_id);
-                }
-              }}
-              onDecide={() => selectedTask && setDecidingTask(selectedTask)}
-              onApprove={() => selectedTask && setReviewingTask(selectedTask)}
-              onReject={() => {}}
-              onRejectSubmitted={() => {
-                if (selectedTask) handleRefresh(selectedTask.project_id);
-              }}
-              onViewLogs={() => selectedTask && setViewingLogs(selectedTask)}
-              onClose={() => setDetailVisible(false)}
             />
-          </div>
-        </>
+            <div style={{ width: `${detailWidth}%` }} className="min-w-0">
+              {detailPanel}
+            </div>
+          </>
+        )
       )}
+
+      <BottomNav
+        activeTab={activeTab as TabKey}
+        counts={counts}
+        onSelectTab={setActiveTab as (tab: TabKey) => void}
+      />
 
       {showCreateTask && (
         <CreateTaskModal
