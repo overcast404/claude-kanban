@@ -163,7 +163,7 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
 
   if (isMobile) {
     return (
-      <div className="fixed inset-0 z-30 bg-warm-card flex flex-col">
+      <div className="fixed inset-0 z-30 bg-warm-card overflow-y-auto">
         {body}
       </div>
     );
