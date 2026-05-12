@@ -23,13 +23,13 @@ export function TopBar({ activeTab, onSelectTab }: Props) {
                 : 'text-warm-text-secondary hover:text-warm-brown'
             }`}
           >
-            <Icon name="folder" size={15} /> 项目
+            <Icon name="folder" size={15} /> <span className="max-md:hidden">项目</span>
           </button>
           <button
             onClick={() => setShowQr(true)}
             className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-xs text-warm-text-secondary hover:text-warm-brown transition-colors"
           >
-            <Icon name="smartphone" size={15} /> 扫码
+            <Icon name="smartphone" size={15} /> <span className="max-md:hidden">扫码</span>
           </button>
         </div>
       </div>
