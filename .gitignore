@@ -33,3 +33,5 @@ Thumbs.db
 .claude/scheduled_tasks.json
 .superpowers/
 .playwright-mcp/
+snapshot-*.yml
+screenshot-*.png

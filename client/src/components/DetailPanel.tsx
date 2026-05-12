@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { Task } from '../../../src/types';
 import { PRIORITY_LABEL, STATUS_LABEL, STATUS_ICON } from '../status';
+import { rejectTask } from '../api';
 import { ActionBar } from './ActionBar';
 import { LogPreview } from './LogPreview';
 import { EmptyState } from './EmptyState';
@@ -17,11 +19,40 @@ interface Props {
   onDecide: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onRejectSubmitted: () => void;
   onViewLogs: () => void;
   onClose: () => void;
 }
 
-export function DetailPanel({ task, projectName, logs, onClose, ...actions }: Props) {
+export function DetailPanel({ task, projectName, logs, onClose, onReject, onRejectSubmitted, ...actions }: Props) {
+  const [showInlineFeedback, setShowInlineFeedback] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleRejectClick = () => {
+    setShowInlineFeedback(true);
+    setFeedbackText('');
+  };
+
+  const handleSendFeedback = async () => {
+    if (!task || !feedbackText.trim()) return;
+    setSubmitting(true);
+    try {
+      await rejectTask(task.id, feedbackText.trim());
+      setShowInlineFeedback(false);
+      setFeedbackText('');
+      onRejectSubmitted();
+    } catch (e) {
+      alert('操作失败: ' + (e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelFeedback = () => {
+    setShowInlineFeedback(false);
+    setFeedbackText('');
+  };
   if (!task) {
     return (
       <div className="h-full border-l border-warm-border bg-warm-card flex items-center justify-center">
@@ -81,7 +112,37 @@ export function DetailPanel({ task, projectName, logs, onClose, ...actions }: Pr
           </div>
         )}
 
-        <ActionBar task={task} {...actions} />
+        <ActionBar task={task} {...actions} onReject={handleRejectClick} />
+
+        {showInlineFeedback && (
+          <div className="mt-3 p-3 border border-warm-border rounded-lg bg-warm-log-bg">
+            <label className="block text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">修改意见</label>
+            <textarea
+              value={feedbackText}
+              onChange={e => setFeedbackText(e.target.value)}
+              placeholder="告诉 Claude 哪里需要改..."
+              rows={3}
+              autoFocus
+              className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text resize-y"
+            />
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                onClick={handleCancelFeedback}
+                className="px-4 py-1.5 border border-warm-border text-warm-text-secondary rounded-lg text-xs font-semibold"
+                disabled={submitting}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSendFeedback}
+                className="px-4 py-1.5 bg-warm-brown text-white rounded-lg text-xs font-bold"
+                disabled={submitting || !feedbackText.trim()}
+              >
+                发送
+              </button>
+            </div>
+          </div>
+        )}
 
         <LogPreview lines={logs} onViewFull={actions.onViewLogs} />
       </div>

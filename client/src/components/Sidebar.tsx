@@ -1,6 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { NavItem } from './NavItem';
-import { QrCodeModal } from './QrCodeModal';
 import { STATUS_ICON, STATUS_LABEL, STATUS_ORDER, ACTION_LABEL, ACTION_ICON } from '../status';
 import type { TaskStatus } from '../../../src/types';
 
@@ -13,7 +12,6 @@ interface Props {
 }
 
 export function Sidebar({ activeTab, counts, onSelectTab }: Props) {
-  const [showQr, setShowQr] = useState(false);
   const actionCount = (counts['deciding'] || 0) + (counts['reviewing'] || 0);
 
   const items = useMemo(() => {
@@ -29,34 +27,18 @@ export function Sidebar({ activeTab, counts, onSelectTab }: Props) {
   }, [actionCount, counts]);
 
   return (
-    <>
-      <aside className="w-14 shrink-0 flex flex-col items-center gap-1 py-3 border-r border-warm-border bg-warm-card">
-        {items.map(item => (
-          <NavItem
-            key={item.key}
-            icon={item.icon}
-            label={item.label}
-            count={item.count}
-            dangerBadge={item.danger}
-            active={activeTab === item.tab}
-            onClick={() => onSelectTab(item.tab)}
-          />
-        ))}
-        <hr className="w-8 border-warm-border" />
+    <aside className="w-14 shrink-0 flex flex-col items-center gap-1 py-3 border-r border-warm-border bg-warm-card">
+      {items.map(item => (
         <NavItem
-          icon="folder"
-          label="项目"
-          active={activeTab === 'projects'}
-          onClick={() => onSelectTab('projects')}
+          key={item.key}
+          icon={item.icon}
+          label={item.label}
+          count={item.count}
+          dangerBadge={item.danger}
+          active={activeTab === item.tab}
+          onClick={() => onSelectTab(item.tab)}
         />
-        <NavItem
-          icon="smartphone"
-          label="扫码"
-          active={false}
-          onClick={() => setShowQr(true)}
-        />
-      </aside>
-      {showQr && <QrCodeModal onClose={() => setShowQr(false)} />}
-    </>
+      ))}
+    </aside>
   );
 }

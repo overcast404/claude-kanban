@@ -3,6 +3,7 @@ import type { Project, Task, Decision, WsMessage, TaskOutputPayload, TaskStatus 
 import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject } from './api';
 import { useWebSocket } from './useWebSocket';
 import { Sidebar, type SidebarTab } from './components/Sidebar';
+import { TopBar } from './components/TopBar';
 import { ListPanel } from './components/ListPanel';
 import { DetailPanel } from './components/DetailPanel';
 import { ProjectView } from './components/ProjectView';
@@ -139,88 +140,95 @@ export default function App() {
   allTasks.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        activeTab={activeTab}
-        counts={counts}
-        onSelectTab={setActiveTab}
-      />
+    <div ref={containerRef} className="flex h-screen overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <TopBar activeTab={activeTab} onSelectTab={setActiveTab} />
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            activeTab={activeTab}
+            counts={counts}
+            onSelectTab={setActiveTab}
+          />
 
-      {activeTab === 'projects' ? (
-        <ProjectView
-          projects={projects}
-          onCreate={() => setShowCreateProject(true)}
-          onDelete={async (p) => {
-            if (confirm(`确定删除项目 "${p.name}" 及其所有任务？`)) {
-              await deleteProject(p.id);
-              handleRefresh();
-            }
-          }}
-        />
-      ) : (
-        <div ref={containerRef} className="flex-1 flex overflow-hidden">
-          <div style={{ width: detailVisible ? `${100 - detailWidth}%` : '100%' }} className="min-w-0">
-            <ListPanel
-              activeTab={activeTab}
-              tasksByProject={tasksByProject}
-              projectNames={projectNames}
-              selectedTaskId={selectedTaskId}
-              onSelectTask={(task) => { setSelectedTaskId(task.id); setDetailVisible(true); }}
-              onCreateTask={() => setShowCreateTask(true)}
+          {activeTab === 'projects' ? (
+            <ProjectView
+              projects={projects}
+              onCreate={() => setShowCreateProject(true)}
+              onDelete={async (p) => {
+                if (confirm(`确定删除项目 "${p.name}" 及其所有任务？`)) {
+                  await deleteProject(p.id);
+                  handleRefresh();
+                }
+              }}
             />
-          </div>
-          {detailVisible && (
-            <>
-              <div
-                className="w-1.5 cursor-col-resize bg-warm-border hover:bg-warm-tan shrink-0 transition-colors"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  resizingRef.current = true;
-                  document.body.style.userSelect = 'none';
-                  document.body.style.cursor = 'col-resize';
-                }}
+          ) : (
+            <div className="flex-1 min-w-0">
+              <ListPanel
+                activeTab={activeTab}
+                tasksByProject={tasksByProject}
+                projectNames={projectNames}
+                selectedTaskId={selectedTaskId}
+                onSelectTask={(task) => { setSelectedTaskId(task.id); setDetailVisible(true); }}
+                onCreateTask={() => setShowCreateTask(true)}
               />
-              <div style={{ width: `${detailWidth}%` }} className="min-w-0">
-                <DetailPanel
-                  task={selectedTask}
-                  projectName={selectedTask ? (projectNames[selectedTask.project_id] || '') : ''}
-                  logs={selectedTask ? (taskOutputs[selectedTask.id] || []) : []}
-                  onStart={async () => {
-                    if (selectedTask) {
-                      await startTask(selectedTask.id);
-                      handleRefresh(selectedTask.project_id);
-                    }
-                  }}
-                  onStop={async () => {
-                    if (selectedTask) {
-                      await stopTask(selectedTask.id);
-                      handleRefresh(selectedTask.project_id);
-                    }
-                  }}
-                  onContinue={async () => {
-                    if (selectedTask) {
-                      await continueTask(selectedTask.id);
-                      handleRefresh(selectedTask.project_id);
-                    }
-                  }}
-                  onEdit={() => selectedTask && setEditingTask(selectedTask)}
-                  onDelete={async () => {
-                    if (selectedTask && confirm(`确定删除任务 "${selectedTask.title}"？`)) {
-                      await deleteTask(selectedTask.id);
-                      setSelectedTaskId(null);
-                      handleRefresh(selectedTask.project_id);
-                    }
-                  }}
-                  onDecide={() => selectedTask && setDecidingTask(selectedTask)}
-                  onApprove={() => selectedTask && setReviewingTask(selectedTask)}
-                  onReject={() => selectedTask && setReviewingTask(selectedTask)}
-                  onViewLogs={() => selectedTask && setViewingLogs(selectedTask)}
-                  onClose={() => setDetailVisible(false)}
-                />
-              </div>
-            </>
+            </div>
           )}
         </div>
+      </div>
+
+      {activeTab !== 'projects' && detailVisible && (
+        <>
+          <div
+            className="w-1.5 cursor-col-resize bg-warm-border hover:bg-warm-tan shrink-0 transition-colors"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              resizingRef.current = true;
+              document.body.style.userSelect = 'none';
+              document.body.style.cursor = 'col-resize';
+            }}
+          />
+          <div style={{ width: `${detailWidth}%` }} className="min-w-0">
+            <DetailPanel
+              task={selectedTask}
+              projectName={selectedTask ? (projectNames[selectedTask.project_id] || '') : ''}
+              logs={selectedTask ? (taskOutputs[selectedTask.id] || []) : []}
+              onStart={async () => {
+                if (selectedTask) {
+                  await startTask(selectedTask.id);
+                  handleRefresh(selectedTask.project_id);
+                }
+              }}
+              onStop={async () => {
+                if (selectedTask) {
+                  await stopTask(selectedTask.id);
+                  handleRefresh(selectedTask.project_id);
+                }
+              }}
+              onContinue={async () => {
+                if (selectedTask) {
+                  await continueTask(selectedTask.id);
+                  handleRefresh(selectedTask.project_id);
+                }
+              }}
+              onEdit={() => selectedTask && setEditingTask(selectedTask)}
+              onDelete={async () => {
+                if (selectedTask && confirm(`确定删除任务 "${selectedTask.title}"？`)) {
+                  await deleteTask(selectedTask.id);
+                  setSelectedTaskId(null);
+                  handleRefresh(selectedTask.project_id);
+                }
+              }}
+              onDecide={() => selectedTask && setDecidingTask(selectedTask)}
+              onApprove={() => selectedTask && setReviewingTask(selectedTask)}
+              onReject={() => {}}
+              onRejectSubmitted={() => {
+                if (selectedTask) handleRefresh(selectedTask.project_id);
+              }}
+              onViewLogs={() => selectedTask && setViewingLogs(selectedTask)}
+              onClose={() => setDetailVisible(false)}
+            />
+          </div>
+        </>
       )}
 
       {showCreateTask && (
