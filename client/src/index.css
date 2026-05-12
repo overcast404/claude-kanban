@@ -23,5 +23,6 @@ body {
   background: var(--color-warm-bg);
   color: var(--color-warm-text);
   margin: 0;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
