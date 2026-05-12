@@ -11,6 +11,7 @@ interface Props {
   task: Task | null;
   projectName: string;
   logs: { stream: string; text: string }[];
+  isMobile?: boolean;
   onStart: () => void;
   onStop: () => void;
   onContinue: () => void;
@@ -24,7 +25,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function DetailPanel({ task, projectName, logs, onClose, onReject, onRejectSubmitted, ...actions }: Props) {
+export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReject, onRejectSubmitted, ...actions }: Props) {
   const [showInlineFeedback, setShowInlineFeedback] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -54,6 +55,7 @@ export function DetailPanel({ task, projectName, logs, onClose, onReject, onReje
     setFeedbackText('');
   };
   if (!task) {
+    if (isMobile) return null;
     return (
       <div className="h-full border-l border-warm-border bg-warm-card flex items-center justify-center">
         <EmptyState icon="arrow-left" message="选择一个任务查看详情" />
@@ -61,21 +63,31 @@ export function DetailPanel({ task, projectName, logs, onClose, onReject, onReje
     );
   }
 
-  return (
-    <div className="h-full border-l border-warm-border bg-warm-card overflow-y-auto">
+  const body = (
+    <div className="overflow-y-auto">
       <div className="p-4">
+        {isMobile && (
+          <button
+            onClick={onClose}
+            className="inline-flex items-center gap-1 text-warm-brown text-sm font-medium mb-3"
+          >
+            <Icon name="arrow-left" size={18} /> 返回
+          </button>
+        )}
         <div className="mb-4">
           <div className="flex items-start justify-between gap-2">
             <h2 className="text-[15px] font-bold text-warm-text mb-1">{task.title}</h2>
-            <button
-              onClick={onClose}
-              className="text-warm-text-secondary hover:text-warm-text p-0.5 rounded shrink-0"
-              title="关闭详情"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
+            {!isMobile && (
+              <button
+                onClick={onClose}
+                className="text-warm-text-secondary hover:text-warm-text p-0.5 rounded shrink-0"
+                title="关闭详情"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2 text-[11px] text-warm-text-secondary">
             <span className="inline-flex items-center gap-0.5"><Icon name="folder" size={12} /> {projectName}</span>
@@ -146,6 +158,20 @@ export function DetailPanel({ task, projectName, logs, onClose, onReject, onReje
 
         <LogPreview lines={logs} onViewFull={actions.onViewLogs} />
       </div>
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 z-30 bg-warm-card flex flex-col">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full border-l border-warm-border bg-warm-card overflow-y-auto">
+      {body}
     </div>
   );
 }
