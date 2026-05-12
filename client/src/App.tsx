@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, Task, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
-import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject } from './api';
+import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask } from './api';
 import { useWebSocket } from './useWebSocket';
 import { TABS, type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
@@ -193,7 +193,12 @@ export default function App() {
         }
       }}
       onDecide={() => selectedTask && setDecidingTask(selectedTask)}
-      onApprove={() => selectedTask && setReviewingTask(selectedTask)}
+      onApprove={async () => {
+        if (selectedTask) {
+          await approveTask(selectedTask.id);
+          handleRefresh(selectedTask.project_id);
+        }
+      }}
       onReject={() => {}}
       onRejectSubmitted={() => {
         if (selectedTask) handleRefresh(selectedTask.project_id);
