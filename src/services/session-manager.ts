@@ -8,10 +8,8 @@ import { broadcast } from '../broadcast';
 import type { Task, Project } from '../types';
 
 const MANAGER_PORT = parseInt(process.env.PORT || '14567', 10);
-const MAX_CONCURRENT = 3;
 
 const runningProcesses = new Map<string, ChildProcess>();
-const pendingQueue: string[] = [];
 
 function getDataDir(): string {
   return process.env.CLAUDE_KANBAN_DATA_DIR || path.join(os.homedir(), '.claude-kanban');
@@ -25,10 +23,6 @@ async function checkClaudeAvailable(): Promise<boolean> {
   });
 }
 
-export function getPendingQueueLength(): number {
-  return pendingQueue.length;
-}
-
 export function getRunningCount(): number {
   return runningProcesses.size;
 }
@@ -39,8 +33,6 @@ export function stopSessionManager(taskId: string): void {
     proc.kill('SIGTERM');
     runningProcesses.delete(taskId);
   }
-  const idx = pendingQueue.indexOf(taskId);
-  if (idx >= 0) pendingQueue.splice(idx, 1);
 }
 
 export async function startTask(taskId: string): Promise<void> {
@@ -59,11 +51,6 @@ export async function startTask(taskId: string): Promise<void> {
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as Project | undefined;
   if (!project) throw new Error('Project not found');
-
-  if (runningProcesses.size >= MAX_CONCURRENT) {
-    pendingQueue.push(taskId);
-    return;
-  }
 
   return launchSession(task, project.working_dir);
 }
@@ -174,15 +161,12 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     try { fs.unlinkSync(hooksConfigPath); } catch {}
     try { fs.unlinkSync(protocolPath); } catch {}
     try { fs.unlinkSync(mcpConfigPath); } catch {}
-
-    processQueue();
   });
 
   proc.on('error', (err) => {
     console.error(`[SessionManager] Task ${task.id} error:`, err.message);
     runningProcesses.delete(task.id);
     db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime('now') WHERE id = ?`).run(task.id);
-    processQueue();
   });
 
   const task_ = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
@@ -317,16 +301,6 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     try { fs.unlinkSync(protocolPath); } catch {}
     try { fs.unlinkSync(mcpConfigPath); } catch {}
   });
-}
-
-function processQueue(): void {
-  if (pendingQueue.length > 0 && runningProcesses.size < MAX_CONCURRENT) {
-    const taskId = pendingQueue.shift()!;
-    const db = getDb();
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as Task | undefined;
-    const project = task ? db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as Project | undefined : null;
-    if (task && project) launchSession(task, project.working_dir);
-  }
 }
 
 function generateSessionId(_taskId: string): string {

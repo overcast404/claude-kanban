@@ -6,7 +6,7 @@ import os from 'os';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import { Task, TaskCreateInput, Decision } from '../types';
-import { startTask, resumeSession, stopSessionManager, getRunningCount, getPendingQueueLength } from '../services/session-manager';
+import { startTask, resumeSession, stopSessionManager, getRunningCount } from '../services/session-manager';
 
 function getDataDir(): string {
   return process.env.CLAUDE_KANBAN_DATA_DIR || path.join(os.homedir(), '.claude-kanban');
@@ -30,8 +30,6 @@ tasksRouter.get('/', (req: Request, res: Response) => {
 tasksRouter.get('/status/system', (_req: Request, res: Response) => {
   res.json({
     running: getRunningCount(),
-    queued: getPendingQueueLength(),
-    maxConcurrent: 3,
   });
 });
 
