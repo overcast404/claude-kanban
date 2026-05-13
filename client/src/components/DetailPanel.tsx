@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Task, Decision } from '../../../src/types';
 import { STATUS_LABEL, STATUS_ICON } from '../status';
-import { rejectTask, getTaskWithDecision, submitDecision } from '../api';
+import { rejectTask, getTaskWithDecision, submitDecision, fetchTaskLogs } from '../api';
+import { parseStream, lineClass } from '../logParser';
 import { ActionBar } from './ActionBar';
 import { LogPreview } from './LogPreview';
 import { EmptyState } from './EmptyState';
@@ -21,8 +22,19 @@ interface Props {
   onApprove: () => void;
   onReject: () => void;
   onRejectSubmitted: () => void;
-  onViewLogs: () => void;
   onClose: () => void;
+}
+
+async function loadAllLogs(taskId: string): Promise<string> {
+  let offset = 0;
+  let allText = '';
+  while (true) {
+    const res = await fetchTaskLogs(taskId, offset);
+    allText += res.text;
+    if (res.eof) break;
+    offset = res.offset;
+  }
+  return allText;
 }
 
 export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReject, onRejectSubmitted, onDecisionResolved, ...actions }: Props) {
@@ -35,6 +47,12 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [otherText, setOtherText] = useState('');
   const [decisionSubmitting, setDecisionSubmitting] = useState(false);
+
+  const [showFullLogs, setShowFullLogs] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [historicalText, setHistoricalText] = useState<string | null>(null);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (task?.status === 'deciding') {
@@ -54,6 +72,38 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
       setDecisionLoading(false);
     }
   }, [task?.id, task?.status]);
+
+  useEffect(() => {
+    if (showFullLogs && task && logs.length === 0) {
+      setLoadingLogs(true);
+      loadAllLogs(task.id).then(setHistoricalText).finally(() => setLoadingLogs(false));
+    }
+  }, [showFullLogs, task?.id, logs.length]);
+
+  useEffect(() => {
+    setShowFullLogs(false);
+    setHistoricalText(null);
+  }, [task?.id]);
+
+  const formattedLines = useMemo(() => {
+    const liveText = logs.map(e => e.text).join('');
+    const combined = (historicalText || '') + liveText;
+    return parseStream(combined.split('\n'));
+  }, [historicalText, logs]);
+
+  useEffect(() => {
+    if (autoScroll && logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [formattedLines, autoScroll]);
+
+  const handleLogScroll = useCallback(() => {
+    if (!logContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = logContainerRef.current;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 30;
+    if (!atBottom && autoScroll) setAutoScroll(false);
+    if (atBottom && !autoScroll) setAutoScroll(true);
+  }, [autoScroll]);
 
   const handleDecisionSubmit = async () => {
     if (!task) return;
@@ -103,9 +153,8 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
     );
   }
 
-  const body = (
-    <div className="overflow-y-auto">
-      <div className="p-4">
+  const taskDetailBody = (
+    <div className="p-4">
         {isMobile && (
           <button
             onClick={onClose}
@@ -166,7 +215,7 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
                 <div className="text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">Claude 的输出上下文</div>
                 <div className="bg-warm-log-bg border border-warm-border rounded-lg p-3 max-h-[180px] overflow-y-auto text-[12px] text-warm-text leading-relaxed">
                   {decision.context.split('\n').map((line, i) => (
-                    <p key={i}>{line || ' '}</p>
+                    <p key={i}>{line || ' '}</p>
                   ))}
                 </div>
               </div>
@@ -272,22 +321,58 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
           </div>
         )}
 
-        <LogPreview lines={logs} onViewFull={actions.onViewLogs} />
+        <LogPreview lines={logs} onViewFull={() => setShowFullLogs(true)} />
+    </div>
+  );
+
+  const logViewBody = (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-warm-border shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowFullLogs(false)}
+            className="inline-flex items-center gap-1 text-warm-brown text-sm font-medium"
+          >
+            <Icon name="arrow-left" size={16} /> 返回
+          </button>
+          <h3 className="text-sm font-bold text-warm-text truncate inline-flex items-center gap-1"><Icon name="clipboard" size={14} /> 日志 — {task.title}</h3>
+        </div>
+        <label className="flex items-center gap-1.5 text-[11px] text-warm-text-secondary cursor-pointer shrink-0">
+          <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} />
+          自动滚动
+        </label>
+      </div>
+      <div ref={logContainerRef} onScroll={handleLogScroll} className="flex-1 overflow-y-auto min-h-0 bg-warm-log-bg">
+        {loadingLogs ? (
+          <div className="flex items-center justify-center h-full text-[13px] text-warm-text-secondary">
+            加载日志...
+          </div>
+        ) : formattedLines.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-[13px] text-warm-text-secondary">
+            {task.status === 'running' ? '等待输出...' : '暂无输出日志'}
+          </div>
+        ) : (
+          <pre className="m-0 p-4 font-mono text-[11px] leading-relaxed text-warm-text whitespace-pre-wrap break-all">
+            {formattedLines.map((l, i) => (
+              <div key={i} className={lineClass(l.type)}>{l.text}</div>
+            ))}
+          </pre>
+        )}
       </div>
     </div>
   );
 
   if (isMobile) {
     return (
-      <div className="fixed inset-0 z-30 bg-warm-card overflow-y-auto">
-        {body}
+      <div className={`fixed inset-0 z-30 bg-warm-card ${showFullLogs ? 'flex flex-col' : 'overflow-y-auto'}`}>
+        {showFullLogs ? logViewBody : taskDetailBody}
       </div>
     );
   }
 
   return (
-    <div className="h-full border-l border-warm-border bg-warm-card overflow-y-auto">
-      {body}
+    <div className={`h-full border-l border-warm-border bg-warm-card ${showFullLogs ? 'flex flex-col' : 'overflow-y-auto'}`}>
+      {showFullLogs ? logViewBody : taskDetailBody}
     </div>
   );
 }

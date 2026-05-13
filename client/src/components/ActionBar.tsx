@@ -10,7 +10,6 @@ interface Props {
   onDelete: () => void;
   onApprove: () => void;
   onReject: () => void;
-  onViewLogs: () => void;
 }
 
 function Btn({ icon, label, primary, danger, onClick }: { icon: IconName; label: string; primary?: boolean; danger?: boolean; onClick: () => void }) {
@@ -27,7 +26,7 @@ function Btn({ icon, label, primary, danger, onClick }: { icon: IconName; label:
   );
 }
 
-export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete, onApprove, onReject, onViewLogs }: Props) {
+export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete, onApprove, onReject }: Props) {
   return (
     <div className="flex flex-wrap gap-2">
       {task.status === 'pending' && (
@@ -45,7 +44,6 @@ export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete,
         <>
           <Btn icon="square" label="停止" danger onClick={onStop} />
           <Btn icon="corner-down-left" label="继续" primary onClick={onContinue} />
-          <Btn icon="clipboard" label="日志" onClick={onViewLogs} />
         </>
       )}
 
@@ -62,9 +60,6 @@ export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete,
         </>
       )}
 
-      {task.status === 'done' && (
-        <Btn icon="clipboard" label="查看日志" onClick={onViewLogs} />
-      )}
     </div>
   );
 }

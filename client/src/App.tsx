@@ -13,7 +13,6 @@ import { CreateTaskModal } from './components/CreateTaskModal';
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { EditTaskModal } from './components/EditTaskModal';
 import { ReviewModal } from './components/ReviewModal';
-import { LogViewer } from './components/LogViewer';
 import { createChunkParser, type ChunkParser } from './activity';
 
 type Tab = 'projects' | TabKey;
@@ -42,7 +41,6 @@ export default function App() {
   const [taskOutputs, setTaskOutputs] = useState<Record<string, { stream: string; text: string }[]>>({});
   const [taskActivities, setTaskActivities] = useState<Record<string, string>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [viewingLogs, setViewingLogs] = useState<Task | null>(null);
   const parsersRef = useRef<Record<string, ChunkParser>>({});
 
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -217,7 +215,6 @@ export default function App() {
       onRejectSubmitted={() => {
         if (selectedTask) handleRefresh(selectedTask.project_id);
       }}
-      onViewLogs={() => selectedTask && setViewingLogs(selectedTask)}
       onClose={() => setDetailVisible(false)}
     />
   );
@@ -322,15 +319,6 @@ export default function App() {
         />
       )}
 
-      {viewingLogs && (
-        <LogViewer
-          taskId={viewingLogs.id}
-          taskTitle={viewingLogs.title}
-          taskStatus={viewingLogs.status}
-          liveOutputs={taskOutputs[viewingLogs.id] || []}
-          onClose={() => setViewingLogs(null)}
-        />
-      )}
     </div>
   );
 }
