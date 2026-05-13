@@ -100,7 +100,6 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     '--settings', hooksConfigPath,
     '--mcp-config', mcpConfigPath,
     '--strict-mcp-config',
-    '--max-turns', String(task.max_turns),
     '--append-system-prompt-file', protocolPath,
   ];
 
@@ -169,22 +168,6 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     flushChunks();
 
     runningProcesses.delete(task.id);
-
-    try {
-      const lines = stdout.trim().split('\n');
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const obj = JSON.parse(lines[i]);
-        if (obj.type === 'result') {
-          const cost = obj.total_cost_usd || 0;
-          const turnCount = obj.num_turns || 0;
-          db.prepare(`UPDATE tasks SET total_cost_usd = total_cost_usd + ?, current_turn = current_turn + ?, updated_at = datetime('now') WHERE id = ?`)
-            .run(cost, turnCount, task.id);
-          break;
-        }
-      }
-    } catch {
-      // Non-JSON output
-    }
 
     checkAndHandleCompletion(task.id, stdout).catch(console.error);
 
@@ -266,7 +249,6 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     '--settings', hooksConfigPath,
     '--mcp-config', mcpConfigPath,
     '--strict-mcp-config',
-    '--max-turns', String(task.max_turns),
     '--append-system-prompt-file', protocolPath,
   ];
 

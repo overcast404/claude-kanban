@@ -1,5 +1,4 @@
 import type { Task } from '../../../src/types';
-import { PRIORITY_LABEL } from '../status';
 
 interface Props {
   task: Task;
@@ -36,16 +35,6 @@ export function TaskCard({ task, projectName, selected, activity, onClick }: Pro
       )}
 
       <div className="flex items-center gap-2 text-[10px] text-warm-text-secondary">
-        {task.priority !== 'normal' && (
-          <span className={task.priority === 'high' ? 'text-warm-danger font-semibold' : 'text-gray-400'}>
-            {PRIORITY_LABEL[task.priority]}优先级
-          </span>
-        )}
-        {task.status === 'running' && (
-          <span className="text-warm-brown">
-            第{task.current_turn}/{task.max_turns}轮 · ${(task.total_cost_usd || 0).toFixed(2)}
-          </span>
-        )}
         {task.status === 'deciding' && (
           <span className="text-warm-danger font-medium">等待决策</span>
         )}

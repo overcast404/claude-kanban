@@ -45,10 +45,6 @@ export function ReviewModal({ task, onClose, onResolved }: Props) {
         </div>
       )}
 
-      <div className="flex gap-6 text-[12px] text-warm-text-secondary mb-4">
-        <span>总花费: ${(task.total_cost_usd || 0).toFixed(2)}</span>
-        <span>总轮次: {task.current_turn}</span>
-      </div>
 
       {isDone ? (
         <div className="flex justify-end">

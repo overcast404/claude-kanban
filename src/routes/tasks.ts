@@ -77,15 +77,15 @@ tasksRouter.post('/', (req: Request, res: Response) => {
   const { projectId } = req.query;
   if (!projectId) return res.status(400).json({ error: 'projectId query required' });
 
-  const { title, description, priority, max_turns }: TaskCreateInput = req.body;
+  const { title, description }: TaskCreateInput = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
 
   const db = getDb();
   const id = uuid();
   db.prepare(`
-    INSERT INTO tasks (id, project_id, title, description, priority, max_turns)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, projectId, title, description || '', priority || 'normal', max_turns ?? 50);
+    INSERT INTO tasks (id, project_id, title, description)
+    VALUES (?, ?, ?, ?)
+  `).run(id, projectId, title, description || '');
 
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
   broadcast({ type: 'task_created', payload: task });

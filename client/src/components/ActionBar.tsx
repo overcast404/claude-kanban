@@ -8,7 +8,6 @@ interface Props {
   onContinue: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onDecide: () => void;
   onApprove: () => void;
   onReject: () => void;
   onViewLogs: () => void;
@@ -28,7 +27,7 @@ function Btn({ icon, label, primary, danger, onClick }: { icon: IconName; label:
   );
 }
 
-export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete, onDecide, onApprove, onReject, onViewLogs }: Props) {
+export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete, onApprove, onReject, onViewLogs }: Props) {
   return (
     <div className="flex flex-wrap gap-2">
       {task.status === 'pending' && (
@@ -48,13 +47,6 @@ export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete,
           <Btn icon="corner-down-left" label="继续" primary onClick={onContinue} />
           <Btn icon="clipboard" label="日志" onClick={onViewLogs} />
         </>
-      )}
-
-      {task.status === 'deciding' && (
-        <button onClick={onDecide} className="px-4 py-1.5 bg-warm-danger text-white rounded-lg text-xs font-bold hover:opacity-85 transition-colors inline-flex items-center gap-1">
-          <Icon name="help-circle" size={14} />
-          查看决策
-        </button>
       )}
 
       {task.status === 'reviewing' && (

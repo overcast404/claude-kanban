@@ -36,9 +36,3 @@ export const TABS = [
 ] as const;
 
 export type TabKey = (typeof TABS)[number]['key'];
-
-export const PRIORITY_LABEL: Record<string, string> = {
-  high: '高',
-  normal: '中',
-  low: '低',
-};

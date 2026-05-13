@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import type { Task } from '../../../src/types';
-import { PRIORITY_LABEL, STATUS_LABEL, STATUS_ICON } from '../status';
-import { rejectTask } from '../api';
+import { useState, useEffect } from 'react';
+import type { Task, Decision } from '../../../src/types';
+import { STATUS_LABEL, STATUS_ICON } from '../status';
+import { rejectTask, getTaskWithDecision, submitDecision } from '../api';
 import { ActionBar } from './ActionBar';
 import { LogPreview } from './LogPreview';
 import { EmptyState } from './EmptyState';
@@ -17,7 +17,7 @@ interface Props {
   onContinue: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onDecide: () => void;
+  onDecisionResolved: () => void;
   onApprove: () => void;
   onReject: () => void;
   onRejectSubmitted: () => void;
@@ -25,10 +25,50 @@ interface Props {
   onClose: () => void;
 }
 
-export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReject, onRejectSubmitted, ...actions }: Props) {
+export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReject, onRejectSubmitted, onDecisionResolved, ...actions }: Props) {
   const [showInlineFeedback, setShowInlineFeedback] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [decision, setDecision] = useState<Decision | null>(null);
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [otherText, setOtherText] = useState('');
+  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (task?.status === 'deciding') {
+      setDecisionLoading(true);
+      setDecision(null);
+      setSelectedOption(null);
+      setOtherText('');
+      getTaskWithDecision(task.id).then(data => {
+        if (data.pendingDecision?.options && typeof data.pendingDecision.options === 'string') {
+          data.pendingDecision.options = JSON.parse(data.pendingDecision.options);
+        }
+        setDecision(data.pendingDecision);
+        setDecisionLoading(false);
+      }).catch(() => setDecisionLoading(false));
+    } else {
+      setDecision(null);
+      setDecisionLoading(false);
+    }
+  }, [task?.id, task?.status]);
+
+  const handleDecisionSubmit = async () => {
+    if (!task) return;
+    const answer = selectedOption === 'other' ? otherText.trim() : selectedOption;
+    if (!answer) return;
+    setDecisionSubmitting(true);
+    try {
+      await submitDecision(task.id, answer);
+      onDecisionResolved();
+    } catch (e) {
+      alert('提交失败: ' + (e as Error).message);
+    } finally {
+      setDecisionSubmitting(false);
+    }
+  };
 
   const handleRejectClick = () => {
     setShowInlineFeedback(true);
@@ -92,11 +132,6 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
           <div className="flex items-center gap-2 text-[11px] text-warm-text-secondary">
             <span className="inline-flex items-center gap-0.5"><Icon name="folder" size={12} /> {projectName}</span>
             <span className="inline-flex items-center gap-0.5"><Icon name={STATUS_ICON[task.status]} size={13} /> {STATUS_LABEL[task.status]}</span>
-            {task.priority !== 'normal' && (
-              <span className={task.priority === 'high' ? 'text-warm-danger font-semibold' : ''}>
-                {PRIORITY_LABEL[task.priority]}优先级
-              </span>
-            )}
           </div>
         </div>
 
@@ -106,16 +141,6 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
           </div>
         )}
 
-        {(task.status === 'running' || task.status === 'reviewing' || task.status === 'done') && (
-          <div className="mb-4 p-3 bg-warm-log-bg border border-warm-border rounded-lg">
-            <h4 className="text-[10px] font-bold text-warm-brown mb-2 inline-flex items-center gap-0.5"><Icon name="activity" size={12} /> 状态</h4>
-            <div className="text-[11px] text-warm-text space-y-0.5">
-              <p>轮次: {task.current_turn}/{task.max_turns}</p>
-              <p>费用: ${(task.total_cost_usd || 0).toFixed(2)}</p>
-              {task.session_id && <p>会话: {task.session_id.slice(0, 8)}...</p>}
-            </div>
-          </div>
-        )}
 
         {task.status === 'reviewing' && task.summary && (
           <div className="mb-4">
@@ -124,7 +149,98 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
           </div>
         )}
 
-        <ActionBar task={task} {...actions} onReject={handleRejectClick} />
+        {task.status !== 'deciding' && (
+          <ActionBar task={task} {...actions} onReject={handleRejectClick} />
+        )}
+
+        {task.status === 'deciding' && decisionLoading && (
+          <div className="mb-4 p-4 border border-warm-border rounded-lg bg-warm-bg">
+            <p className="text-sm text-warm-text-secondary">加载决策内容...</p>
+          </div>
+        )}
+
+        {task.status === 'deciding' && decision && !decisionLoading && (
+          <div className="mb-4 space-y-3">
+            {decision.context && (
+              <div>
+                <div className="text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">Claude 的输出上下文</div>
+                <div className="bg-warm-log-bg border border-warm-border rounded-lg p-3 max-h-[180px] overflow-y-auto text-[12px] text-warm-text leading-relaxed">
+                  {decision.context.split('\n').map((line, i) => (
+                    <p key={i}>{line || ' '}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">Claude 的问题</div>
+              <div className="bg-warm-bg border border-warm-tan rounded-lg p-3 text-[13px] text-warm-text font-medium">
+                {decision.question}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">你的回答</div>
+              {(decision.options || []).map((opt: { label: string; description?: string }, i: number) => (
+                <div
+                  key={i}
+                  onClick={() => setSelectedOption(opt.label)}
+                  className={`p-2.5 border rounded-lg mb-1.5 cursor-pointer transition-colors ${
+                    selectedOption === opt.label
+                      ? 'border-warm-brown bg-warm-bg'
+                      : 'border-warm-border hover:border-warm-tan'
+                  }`}
+                >
+                  <div className="text-[12px] font-semibold text-warm-text">
+                    {String.fromCharCode(65 + i)} &middot; {opt.label}
+                  </div>
+                  {opt.description && (
+                    <div className="text-[11px] text-warm-text-secondary mt-0.5">{opt.description}</div>
+                  )}
+                </div>
+              ))}
+
+              <div
+                onClick={() => setSelectedOption('other')}
+                className={`p-2.5 border rounded-lg mb-1.5 cursor-pointer transition-colors border-dashed ${
+                  selectedOption === 'other'
+                    ? 'border-warm-brown bg-warm-bg'
+                    : 'border-warm-border hover:border-warm-tan'
+                }`}
+              >
+                <div className="text-[12px] font-semibold text-warm-text inline-flex items-center gap-1">
+                  <Icon name="edit" size={14} /> 自定义回答
+                </div>
+                {selectedOption === 'other' && (
+                  <textarea
+                    value={otherText}
+                    onChange={e => setOtherText(e.target.value)}
+                    placeholder="输入你的回答..."
+                    rows={3}
+                    className="w-full mt-2 p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text resize-y"
+                    onClick={e => e.stopPropagation()}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={handleDecisionSubmit}
+                className="px-4 py-1.5 bg-warm-brown text-white rounded-lg text-xs font-bold hover:bg-warm-brown-hover transition-colors disabled:opacity-50"
+                disabled={decisionSubmitting || !selectedOption || (selectedOption === 'other' && !otherText.trim())}
+              >
+                提交回答并继续执行
+              </button>
+            </div>
+          </div>
+        )}
+
+        {task.status === 'deciding' && !decision && !decisionLoading && (
+          <div className="mb-4 p-4 border border-warm-border rounded-lg bg-warm-bg">
+            <p className="text-sm text-warm-text-secondary">暂无待处理的决策</p>
+          </div>
+        )}
 
         {showInlineFeedback && (
           <div className="mt-3 p-3 border border-warm-border rounded-lg bg-warm-log-bg">

@@ -12,7 +12,6 @@ import { ProjectView } from './components/ProjectView';
 import { CreateTaskModal } from './components/CreateTaskModal';
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { EditTaskModal } from './components/EditTaskModal';
-import { DecisionModal } from './components/DecisionModal';
 import { ReviewModal } from './components/ReviewModal';
 import { LogViewer } from './components/LogViewer';
 import { createChunkParser, type ChunkParser } from './activity';
@@ -49,7 +48,6 @@ export default function App() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [decidingTask, setDecidingTask] = useState<Task | null>(null);
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
 
   const [detailVisible, setDetailVisible] = useState(true);
@@ -206,7 +204,9 @@ export default function App() {
           handleRefresh(selectedTask.project_id);
         }
       }}
-      onDecide={() => selectedTask && setDecidingTask(selectedTask)}
+      onDecisionResolved={() => {
+        if (selectedTask) handleRefresh(selectedTask.project_id);
+      }}
       onApprove={async () => {
         if (selectedTask) {
           await approveTask(selectedTask.id);
@@ -311,14 +311,6 @@ export default function App() {
           task={editingTask}
           onClose={() => setEditingTask(null)}
           onUpdated={() => { setEditingTask(null); handleRefresh(editingTask.project_id); }}
-        />
-      )}
-
-      {decidingTask && (
-        <DecisionModal
-          task={decidingTask}
-          onClose={() => setDecidingTask(null)}
-          onResolved={() => { setDecidingTask(null); handleRefresh(); }}
         />
       )}
 

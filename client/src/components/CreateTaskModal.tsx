@@ -12,8 +12,6 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState('normal');
-  const [maxTurns, setMaxTurns] = useState(50);
   const [submitting, setSubmitting] = useState(false);
 
   const handleCreate = async (start: boolean) => {
@@ -23,8 +21,6 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
       const task = await createTask(projectId, {
         title: title.trim(),
         description: description.trim(),
-        priority: priority as 'high' | 'normal' | 'low',
-        max_turns: maxTurns,
       });
       if (start) await startTask(task.id);
       onCreated();
@@ -69,31 +65,6 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
             placeholder="任务描述（可选）"
             rows={3}
           />
-        </div>
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">优先级</label>
-            <select
-              value={priority}
-              onChange={e => setPriority(e.target.value)}
-              className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text"
-            >
-              <option value="high">高</option>
-              <option value="normal">中</option>
-              <option value="low">低</option>
-            </select>
-          </div>
-          <div className="flex-1">
-            <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">最大轮次</label>
-            <input
-              type="number"
-              value={maxTurns}
-              onChange={e => setMaxTurns(Number(e.target.value))}
-              className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text"
-              min={1}
-              max={200}
-            />
-          </div>
         </div>
         <div className="flex justify-end gap-2 pt-3">
           <button
