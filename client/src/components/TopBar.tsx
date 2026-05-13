@@ -13,7 +13,10 @@ export function TopBar({ activeTab, onSelectTab }: Props) {
   return (
     <>
       <div className="flex items-center justify-between h-10 px-3 border-b border-warm-border bg-warm-card shrink-0">
-        <span className="text-sm font-bold text-warm-brown">Claude Kanban</span>
+        <div className="flex items-center gap-2">
+          <img src="/logo.png" alt="Logo" className="h-6 w-auto" />
+          <span className="text-sm font-bold text-warm-brown">Claude Kanban</span>
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => onSelectTab('projects')}
