@@ -5,13 +5,16 @@ interface Props {
   task: Task;
   projectName: string;
   selected: boolean;
+  activity?: string;
   onClick: () => void;
 }
 
-export function TaskCard({ task, projectName, selected, onClick }: Props) {
+export function TaskCard({ task, projectName, selected, activity, onClick }: Props) {
   const isDone = task.status === 'done';
   const isDeciding = task.status === 'deciding';
   const isReviewing = task.status === 'reviewing';
+  const isRunning = task.status === 'running';
+  const hasActivity = isRunning && !!activity;
 
   return (
     <div
@@ -25,6 +28,12 @@ export function TaskCard({ task, projectName, selected, onClick }: Props) {
       <div className={`text-[13px] font-bold text-warm-text mb-1 ${isDone ? 'line-through' : ''}`}>
         {task.title}
       </div>
+
+      {hasActivity && (
+        <div className="text-[10px] text-warm-brown font-mono leading-relaxed truncate mb-1">
+          {activity}
+        </div>
+      )}
 
       <div className="flex items-center gap-2 text-[10px] text-warm-text-secondary">
         {task.priority !== 'normal' && (

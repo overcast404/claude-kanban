@@ -15,6 +15,7 @@ import { EditTaskModal } from './components/EditTaskModal';
 import { DecisionModal } from './components/DecisionModal';
 import { ReviewModal } from './components/ReviewModal';
 import { LogViewer } from './components/LogViewer';
+import { createChunkParser, type ChunkParser } from './activity';
 
 type Tab = 'projects' | TabKey;
 
@@ -40,8 +41,10 @@ export default function App() {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
   const [taskOutputs, setTaskOutputs] = useState<Record<string, { stream: string; text: string }[]>>({});
+  const [taskActivities, setTaskActivities] = useState<Record<string, string>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [viewingLogs, setViewingLogs] = useState<Task | null>(null);
+  const parsersRef = useRef<Record<string, ChunkParser>>({});
 
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -92,6 +95,8 @@ export default function App() {
         if (selectedTaskId === id) setSelectedTaskId(null);
       }
       setTaskOutputs(prev => { const next = { ...prev }; delete next[id]; return next; });
+      setTaskActivities(prev => { const next = { ...prev }; delete next[id]; return next; });
+      delete parsersRef.current[id];
       loadProjects();
     } else if (msg.type === 'project_deleted') {
       const { id } = msg.payload as { id: string };
@@ -106,6 +111,15 @@ export default function App() {
         ...prev,
         [payload.taskId]: [...(prev[payload.taskId] || []), { stream: payload.stream, text: payload.text }],
       }));
+      if (payload.stream === 'stdout') {
+        if (!parsersRef.current[payload.taskId]) {
+          parsersRef.current[payload.taskId] = createChunkParser();
+        }
+        const activity = parsersRef.current[payload.taskId].feed(payload.text);
+        if (activity) {
+          setTaskActivities(prev => ({ ...prev, [payload.taskId]: activity }));
+        }
+      }
     }
   }, [loadProjects, selectedTaskId]));
 
@@ -241,6 +255,7 @@ export default function App() {
                 tasksByProject={tasksByProject}
                 projectNames={projectNames}
                 selectedTaskId={selectedTaskId}
+                taskActivities={taskActivities}
                 onSelectTask={(task) => { setSelectedTaskId(task.id); setDetailVisible(true); }}
                 onCreateTask={() => setShowCreateTask(true)}
               />

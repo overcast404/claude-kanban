@@ -6,10 +6,11 @@ interface Props {
   projectName: string;
   tasks: Task[];
   selectedTaskId: string | null;
+  taskActivities: Record<string, string>;
   onSelectTask: (task: Task) => void;
 }
 
-export function ProjectGroup({ projectName, tasks, selectedTaskId, onSelectTask }: Props) {
+export function ProjectGroup({ projectName, tasks, selectedTaskId, taskActivities, onSelectTask }: Props) {
   if (tasks.length === 0) return null;
 
   return (
@@ -24,6 +25,7 @@ export function ProjectGroup({ projectName, tasks, selectedTaskId, onSelectTask 
             task={task}
             projectName={projectName}
             selected={selectedTaskId === task.id}
+            activity={taskActivities[task.id] || ''}
             onClick={() => onSelectTask(task)}
           />
         ))}

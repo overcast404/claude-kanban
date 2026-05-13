@@ -35,3 +35,4 @@ Thumbs.db
 .playwright-mcp/
 snapshot-*.yml
 screenshot-*.png
+docs/superpowers/screenshots/

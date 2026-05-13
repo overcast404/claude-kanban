@@ -9,13 +9,14 @@ interface Props {
   tasksByProject: Record<string, Task[]>;
   projectNames: Record<string, string>;
   selectedTaskId: string | null;
+  taskActivities: Record<string, string>;
   onSelectTask: (task: Task) => void;
   onCreateTask: () => void;
 }
 
 export function ListPanel({
   activeTab, tasksByProject, projectNames,
-  selectedTaskId, onSelectTask, onCreateTask,
+  selectedTaskId, taskActivities, onSelectTask, onCreateTask,
 }: Props) {
   const tab = TABS.find(t => t.key === activeTab);
   const statuses = tab?.statuses || [];
@@ -52,6 +53,7 @@ export function ListPanel({
               projectName={projectNames[projectId] || projectId}
               tasks={tasks.filter(t => statuses.includes(t.status))}
               selectedTaskId={selectedTaskId}
+              taskActivities={taskActivities}
               onSelectTask={onSelectTask}
             />
           ))
