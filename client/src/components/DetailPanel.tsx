@@ -7,6 +7,7 @@ import { ActionBar } from './ActionBar';
 import { LogPreview } from './LogPreview';
 import { EmptyState } from './EmptyState';
 import { Icon } from './Icon';
+import MarkdownContent from './MarkdownContent';
 
 interface Props {
   task: Task | null;
@@ -74,11 +75,11 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
   }, [task?.id, task?.status]);
 
   useEffect(() => {
-    if (showFullLogs && task && logs.length === 0) {
+    if (task && logs.length === 0) {
       setLoadingLogs(true);
       loadAllLogs(task.id).then(setHistoricalText).finally(() => setLoadingLogs(false));
     }
-  }, [showFullLogs, task?.id, logs.length]);
+  }, [task?.id, logs.length]);
 
   useEffect(() => {
     setShowFullLogs(false);
@@ -186,15 +187,15 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
 
         {task.description && (
           <div className="mb-4">
-            <p className="text-[12px] text-warm-text leading-relaxed">{task.description}</p>
+            <MarkdownContent>{task.description}</MarkdownContent>
           </div>
         )}
 
 
-        {task.status === 'reviewing' && task.summary && (
+        {(task.status === 'reviewing' || task.status === 'done') && task.summary && (
           <div className="mb-4">
             <h4 className="text-[10px] font-bold text-warm-brown mb-1 inline-flex items-center gap-0.5"><Icon name="clipboard" size={12} /> 摘要</h4>
-            <p className="text-[12px] text-warm-text leading-relaxed">{task.summary}</p>
+            <MarkdownContent>{task.summary}</MarkdownContent>
           </div>
         )}
 
@@ -321,7 +322,7 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
           </div>
         )}
 
-        <LogPreview lines={logs} onViewFull={() => setShowFullLogs(true)} />
+        <LogPreview lines={logs} historicalText={historicalText} onViewFull={() => setShowFullLogs(true)} />
     </div>
   );
 

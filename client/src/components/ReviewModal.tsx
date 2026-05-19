@@ -3,6 +3,7 @@ import type { Task } from '../../../src/types';
 import { approveTask, rejectTask } from '../api';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
+import MarkdownContent from './MarkdownContent';
 
 interface Props {
   task: Task;
@@ -37,10 +38,8 @@ export function ReviewModal({ task, onClose, onResolved }: Props) {
       {task.summary && (
         <div className="mb-3">
           <div className="text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">Claude 的完成摘要</div>
-          <div className="bg-warm-log-bg border border-warm-border rounded-lg p-3 text-[12px] text-warm-text leading-relaxed max-h-[200px] overflow-y-auto">
-            {task.summary.split('\n').map((line, i) => (
-              <p key={i}>{line || ' '}</p>
-            ))}
+          <div className="bg-warm-log-bg border border-warm-border rounded-lg p-3 max-h-[200px] overflow-y-auto">
+            <MarkdownContent>{task.summary}</MarkdownContent>
           </div>
         </div>
       )}

@@ -4,21 +4,24 @@ import { Icon } from './Icon';
 
 interface Props {
   lines: { stream: string; text: string }[];
+  historicalText: string | null;
   onViewFull: () => void;
 }
 
-export function LogPreview({ lines, onViewFull }: Props) {
+export function LogPreview({ lines, historicalText, onViewFull }: Props) {
   const parsed = useMemo(() => {
-    const allText = lines.map(l => l.text).join('');
-    const all = parseStream(allText.split('\n'));
+    const source = lines.length > 0
+      ? lines.map(l => l.text).join('')
+      : (historicalText || '');
+    const all = parseStream(source.split('\n'));
     return all.slice(-20);
-  }, [lines]);
+  }, [lines, historicalText]);
 
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-[11px] font-bold text-warm-brown inline-flex items-center gap-0.5"><Icon name="clipboard" size={13} /> 最近日志</h4>
-        {lines.length > 0 && (
+        {(lines.length > 0 || historicalText) && (
           <button
             onClick={onViewFull}
             className="text-[10px] text-warm-tan hover:text-warm-brown transition-colors"
