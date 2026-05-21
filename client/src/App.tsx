@@ -442,6 +442,7 @@ export default function App() {
           console.error('Reply failed:', err);
           setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id));
         }
+        setQuoteTarget(null);
         return;
       }
     }
