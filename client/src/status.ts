@@ -30,6 +30,7 @@ export const IN_PROGRESS_LABEL = '进行中';
 export const IN_PROGRESS_ICON: IconName = 'zap';
 
 export const TABS = [
+  { key: 'chat', icon: 'message-circle' as IconName, label: '聊天', statuses: [] as TaskStatus[] },
   { key: 'in-progress', icon: IN_PROGRESS_ICON, label: IN_PROGRESS_LABEL, statuses: IN_PROGRESS_STATUSES },
   { key: 'action', icon: ACTION_ICON, label: ACTION_LABEL, statuses: ACTION_STATUSES },
   { key: 'done', icon: STATUS_ICON.done, label: STATUS_LABEL.done, statuses: ['done'] as TaskStatus[] },
