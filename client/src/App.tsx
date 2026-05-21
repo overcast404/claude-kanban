@@ -22,6 +22,23 @@ type ProjectData = Project & {
   count_reviewing: number; count_done: number;
 };
 
+export interface ChatMessage {
+  id: string;
+  taskId: string;
+  projectId: string;
+  projectName: string;
+  type: 'user_message' | 'ai_execution' | 'ai_decision' | 'ai_review' | 'system';
+  content: string;
+  quoteMessageId?: string;
+  decision?: Decision;
+  round: number;
+  timestamp: string;
+}
+
+function chatMsgId() {
+  return 'cm_' + Math.random().toString(36).slice(2, 10);
+}
+
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
@@ -47,6 +64,10 @@ export default function App() {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [quoteTarget, setQuoteTarget] = useState<ChatMessage | null>(null);
+  const lastTaskStatus = useRef<Record<string, TaskStatus>>({});
+  const taskRounds = useRef<Record<string, number>>({});
 
   const [detailVisible, setDetailVisible] = useState(true);
   const [detailWidth, setDetailWidth] = useState(50);
