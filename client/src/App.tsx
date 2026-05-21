@@ -418,6 +418,35 @@ export default function App() {
 
   // === Chat: user action handlers ===
   const handleChatSend = useCallback(async (text: string, quoteMessageId?: string) => {
+    // If replying to an AI bubble (review or decision), continue the existing task
+    if (quoteMessageId) {
+      const quotedMsg = chatMessages.find(m => m.id === quoteMessageId);
+      if (quotedMsg && (quotedMsg.type === 'ai_review' || quotedMsg.type === 'ai_decision')) {
+        const replyMsg: ChatMessage = {
+          id: chatMsgId(),
+          taskId: quotedMsg.taskId,
+          projectId: quotedMsg.projectId,
+          projectName: quotedMsg.projectName,
+          type: 'user_message',
+          content: '↩ ' + quotedMsg.content.slice(0, 50) + '\n' + text,
+          quoteMessageId,
+          round: quotedMsg.round,
+          timestamp: new Date().toISOString(),
+        };
+        setChatMessages(prev => [...prev, replyMsg]);
+        taskLastUserMsg.current[quotedMsg.taskId] = replyMsg.id;
+        try {
+          await rejectTask(quotedMsg.taskId, text);
+          handleRefresh(quotedMsg.projectId);
+        } catch (err) {
+          console.error('Reply failed:', err);
+          setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id));
+        }
+        return;
+      }
+    }
+
+    // Otherwise create a new task via @mention
     const atMatch = text.match(/^@(\S+)\s+(.+)/);
     if (!atMatch) return;
     const [, projectName, description] = atMatch;
@@ -447,10 +476,9 @@ export default function App() {
       loadTasks(project.id);
     } catch (err) {
       console.error('Chat send failed:', err);
-      // Remove the optimistic message on failure
       setChatMessages(prev => prev.filter(m => m.id !== userMsg.id));
     }
-  }, [projects, loadProjects, loadTasks]);
+  }, [projects, loadProjects, loadTasks, chatMessages, handleRefresh]);
 
   const handleChatDecision = useCallback(async (msg: ChatMessage, answer: string) => {
     let finalAnswer = answer;

@@ -116,7 +116,7 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
         {isDecision && (
           <>
             <div className="mb-2 whitespace-pre-wrap">{content}</div>
-            {message.decision?.options && message.decision.options.length > 0 && (
+            {message.decision?.options && Array.isArray(message.decision.options) && message.decision.options.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {message.decision.options.map((opt, i) => (
                   <button
@@ -150,10 +150,10 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
                 ✅ 批准完成
               </button>
               <button
-                onClick={() => onReject(message)}
+                onClick={() => onQuoteReply(message)}
                 className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
               >
-                ↩ 驳回修改
+                💬 回复
               </button>
             </div>
           </>
