@@ -369,21 +369,26 @@ export default function App() {
       const proj = projectsRef.current.find(p => p.id === task.project_id);
       const pName = proj?.name || task.project_id;
       setChatMessages(prev => {
-        // Find the latest unresolved ai_decision (empty, created by task_updated) and populate it.
-        // If already resolved (has decision data + user reply after it), create a new one.
+        // Remove latest ai_execution for this task
+        let filtered = prev;
         for (let i = prev.length - 1; i >= 0; i--) {
-          if (prev[i].taskId === task.id && prev[i].type === 'ai_decision') {
-            if (!prev[i].decision) {
-              // Unresolved — populate with decision data
-              const updated = [...prev];
-              updated[i] = { ...updated[i], content: decision.question, decision };
-              return updated;
-            }
-            // Already has decision data — create new bubble instead of overwriting
+          if (prev[i].taskId === task.id && prev[i].type === 'ai_execution') {
+            filtered = prev.filter((_, idx) => idx !== i);
             break;
           }
         }
-        return [...prev, {
+        // Find the latest unresolved ai_decision and populate it
+        for (let i = filtered.length - 1; i >= 0; i--) {
+          if (filtered[i].taskId === task.id && filtered[i].type === 'ai_decision') {
+            if (!filtered[i].decision) {
+              const updated = [...filtered];
+              updated[i] = { ...updated[i], content: decision.question, decision };
+              return updated;
+            }
+            break;
+          }
+        }
+        return [...filtered, {
           id: chatMsgId(),
           taskId: task.id,
           projectId: task.project_id,
