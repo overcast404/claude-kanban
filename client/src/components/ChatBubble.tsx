@@ -9,6 +9,18 @@ interface Props {
   onQuoteReply: (msg: ChatMessage) => void;
 }
 
+function QuoteReplyButton({ side, onClick }: { side: 'left' | 'right'; onClick: () => void }) {
+  return (
+    <button
+      className={`absolute ${side === 'left' ? '-left-2' : '-right-1.5'} top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity bg-white border border-warm-border rounded-full p-0.5 shadow-sm`}
+      onClick={onClick}
+      title="引用回复"
+    >
+      <Icon name="corner-down-left" size={12} className="text-warm-text-secondary" />
+    </button>
+  );
+}
+
 export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQuoteReply }: Props) {
   const { type, projectName, content, round } = message;
 
@@ -32,13 +44,7 @@ export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQu
           <div className="whitespace-pre-wrap break-words">
             {message.quoteMessageId ? content.split('\n').slice(1).join('\n') || content : content}
           </div>
-          <button
-            className="absolute -left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-warm-border rounded-full p-0.5 shadow-sm"
-            onClick={() => onQuoteReply(message)}
-            title="引用回复"
-          >
-            <Icon name="corner-down-left" size={12} className="text-warm-text-secondary" />
-          </button>
+          <QuoteReplyButton side="left" onClick={() => onQuoteReply(message)} />
         </div>
       </div>
     );
@@ -65,7 +71,7 @@ export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQu
 
   return (
     <div className="flex justify-start px-3">
-      <div className={`group relative bg-white border ${borderStyle} px-3 py-2.5 rounded-xl rounded-bl-sm max-w-[75%] text-[13px] leading-relaxed shadow-sm`}>
+      <div className={`group relative border ${borderStyle} ${!isReview ? 'bg-white' : ''} px-3 py-2.5 rounded-xl rounded-bl-sm max-w-[75%] text-[13px] leading-relaxed shadow-sm`}>
         <div className="flex items-center gap-2 mb-1.5">
           <span className="font-semibold text-[11px] text-warm-brown">🤖 {label}</span>
           {statusBadge && (
@@ -131,13 +137,7 @@ export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQu
           </>
         )}
 
-        <button
-          className="absolute -right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-warm-border rounded-full p-0.5 shadow-sm"
-          onClick={() => onQuoteReply(message)}
-          title="引用回复"
-        >
-          <Icon name="corner-down-left" size={12} className="text-warm-text-secondary" />
-        </button>
+        <QuoteReplyButton side="right" onClick={() => onQuoteReply(message)} />
       </div>
     </div>
   );
