@@ -133,43 +133,63 @@ export default function App() {
     projects.forEach(p => loadTasks(p.id));
   }, [projects, loadTasks]);
 
-  // Load persisted chat messages on mount
+  // Load persisted chat messages with pagination
+  const PAGE_SIZE = 20;
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadedOffset = useRef(0);
+
+  const parseChatRows = useCallback((rows: { id: string; taskId: string; projectId: string; projectName: string; type: string; content: string; quoteMessageId?: string; decision?: unknown; round: number; timestamp: string }[]) => {
+    return rows.map(r => {
+      let decision: Decision | undefined;
+      if (r.decision) {
+        const raw = r.decision as Record<string, unknown>;
+        decision = { ...raw, options: typeof raw.options === 'string' ? JSON.parse(raw.options as string) : raw.options } as Decision;
+      }
+      return {
+        id: r.id, taskId: r.taskId, projectId: r.projectId, projectName: r.projectName,
+        type: r.type as ChatMessage['type'], content: r.content, quoteMessageId: r.quoteMessageId,
+        decision, round: r.round, timestamp: r.timestamp,
+      };
+    });
+  }, []);
+
   useEffect(() => {
-    fetchChatMessages().then(rows => {
+    fetchChatMessages(PAGE_SIZE, 0).then(rows => {
       if (rows.length > 0) {
-        const msgs: ChatMessage[] = rows.map(r => {
-          // Fix double-encoded options string from DB
-          let decision: Decision | undefined;
-          if (r.decision) {
-            const raw = r.decision as Record<string, unknown>;
-            decision = {
-              ...raw,
-              options: typeof raw.options === 'string' ? JSON.parse(raw.options as string) : raw.options,
-            } as Decision;
-          }
-          return {
-            id: r.id,
-            taskId: r.taskId,
-            projectId: r.projectId,
-            projectName: r.projectName,
-            type: r.type as ChatMessage['type'],
-            content: r.content,
-            quoteMessageId: r.quoteMessageId,
-            decision,
-            round: r.round,
-            timestamp: r.timestamp,
-          };
-        });
-        // Restore taskLastUserMsg from loaded messages
+        const msgs = parseChatRows(rows).reverse(); // DB returns DESC, we want ASC
         for (const m of msgs) {
-          if (m.type === 'user_message' && m.taskId) {
+          if (m.type === 'user_message' && m.taskId) taskLastUserMsg.current[m.taskId] = m.id;
+        }
+        setChatMessages(msgs);
+        setHasMore(rows.length >= PAGE_SIZE);
+        loadedOffset.current = rows.length;
+      }
+    }).catch(() => {});
+  }, [parseChatRows]);
+
+  const loadMoreMessages = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const rows = await fetchChatMessages(PAGE_SIZE, loadedOffset.current);
+      if (rows.length > 0) {
+        const olderMsgs = parseChatRows(rows).reverse();
+        for (const m of olderMsgs) {
+          if (m.type === 'user_message' && m.taskId && !taskLastUserMsg.current[m.taskId]) {
             taskLastUserMsg.current[m.taskId] = m.id;
           }
         }
-        setChatMessages(msgs);
+        setChatMessages(prev => [...olderMsgs, ...prev]);
+        setHasMore(rows.length >= PAGE_SIZE);
+        loadedOffset.current += rows.length;
+      } else {
+        setHasMore(false);
       }
-    }).catch(() => {}); // server may not be ready yet
-  }, []);
+    } catch {} finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, parseChatRows]);
 
   // Sync chat messages to server for persistence
   const prevMsgSnap = useRef<{ ids: Set<string>; contents: Map<string, string>; types: Map<string, string>; decisions: Map<string, string> }>({ ids: new Set(), contents: new Map(), types: new Map(), decisions: new Map() });
@@ -785,6 +805,9 @@ export default function App() {
                 onThreadOpen={handleThreadOpen}
                 onProjectClick={handleChatProjectClick}
                 mentionPrefill={mentionPrefill}
+                hasMore={hasMore}
+                loadingMore={loadingMore}
+                onLoadMore={loadMoreMessages}
               />
               {threadTaskId && <ThreadPanel taskId={threadTaskId} taskTitle={threadTitle} messages={chatMessages} onClose={handleThreadClose} />}
             </>

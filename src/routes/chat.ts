@@ -40,12 +40,12 @@ chatRouter.get('/', (req: Request, res: Response) => {
 
   if (taskId) {
     const rows = db.prepare(
-      'SELECT * FROM chat_messages WHERE task_id = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?'
+      'SELECT * FROM chat_messages WHERE task_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?'
     ).all(taskId, limit, offset) as ChatMessageRow[];
     res.json(rows.map(rowToMsg));
   } else {
     const rows = db.prepare(
-      'SELECT * FROM chat_messages ORDER BY timestamp ASC LIMIT ? OFFSET ?'
+      'SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT ? OFFSET ?'
     ).all(limit, offset) as ChatMessageRow[];
     res.json(rows.map(rowToMsg));
   }

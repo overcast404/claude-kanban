@@ -25,6 +25,9 @@ interface Props {
   onThreadOpen: (taskId: string) => void;
   onProjectClick: (projectName: string) => void;
   mentionPrefill: { name: string; n: number } | null;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
 }
 
 export function ChatPanel(props: Props) {
@@ -37,6 +40,9 @@ export function ChatPanel(props: Props) {
       <div className="flex-1 flex flex-col min-w-0">
         <ChatMessageList
           messages={props.messages}
+          hasMore={props.hasMore}
+          loadingMore={props.loadingMore}
+          onLoadMore={props.onLoadMore}
           onDecisionClick={props.onDecisionClick}
           onApprove={props.onApprove}
           onReject={props.onReject}

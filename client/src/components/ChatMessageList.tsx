@@ -1,9 +1,12 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import type { ChatMessage } from '../App';
 import { ChatBubble } from './ChatBubble';
 
 interface Props {
   messages: ChatMessage[];
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
@@ -11,12 +14,26 @@ interface Props {
   onThreadOpen: (taskId: string) => void;
 }
 
-export function ChatMessageList({ messages, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
+export function ChatMessageList({ messages, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const prevLen = useRef(messages.length);
+  const isNewMessage = messages.length > prevLen.current && messages[messages.length - 1]?.id !== messages[prevLen.current - 1]?.id;
+  prevLen.current = messages.length;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, messages[messages.length - 1]?.content.length]);
+    if (isNewMessage) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el || loadingMore || !hasMore) return;
+    if (el.scrollTop < 50) {
+      onLoadMore();
+    }
+  }, [loadingMore, hasMore, onLoadMore]);
 
   const getQuotedMessage = (id: string) => messages.find(m => m.id === id);
 
@@ -35,7 +52,10 @@ export function ChatMessageList({ messages, onDecisionClick, onApprove, onReject
   }
 
   return (
-    <div className="flex-1 overflow-y-auto py-3 flex flex-col gap-2 bg-gray-50/50">
+    <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-3 flex flex-col gap-2 bg-gray-50/50">
+      {loadingMore && (
+        <div className="text-center text-[10px] text-warm-text-secondary py-1">加载中...</div>
+      )}
       {messages.map(msg => (
         <ChatBubble
           key={msg.id}

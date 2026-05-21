@@ -89,7 +89,7 @@ export interface ChatMessageRow {
   round: number;
   timestamp: string;
 }
-export const fetchChatMessages = () =>
-  request<ChatMessageRow[]>('/chat-messages');
+export const fetchChatMessages = (limit = 20, offset = 0) =>
+  request<ChatMessageRow[]>(`/chat-messages?limit=${limit}&offset=${offset}`);
 export const saveChatMessage = (msg: ChatMessageRow) =>
   request<{ ok: boolean }>('/chat-messages', { method: 'POST', body: JSON.stringify(msg) });
