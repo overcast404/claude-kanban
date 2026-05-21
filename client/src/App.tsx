@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
-import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask } from './api';
+import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, fetchChatMessages, saveChatMessage } from './api';
 import { useWebSocket } from './useWebSocket';
 import { TABS, type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
@@ -61,6 +61,34 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const parsersRef = useRef<Record<string, ChunkParser>>({});
   const chatParsersRef = useRef<Record<string, ChunkParser>>({});
+  const streamSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Save a chat message to server (fire-and-forget)
+  const persistMsg = useCallback((msg: ChatMessage) => {
+    saveChatMessage({
+      id: msg.id,
+      taskId: msg.taskId,
+      projectId: msg.projectId,
+      projectName: msg.projectName,
+      type: msg.type,
+      content: msg.content,
+      quoteMessageId: msg.quoteMessageId,
+      decision: msg.decision,
+      round: msg.round,
+      timestamp: msg.timestamp,
+    }).catch(() => {});
+  }, []);
+
+  // Debounced save for streaming updates (every 3s max per task)
+  const persistMsgDebounced = useCallback((msg: ChatMessage) => {
+    if (streamSaveTimers.current[msg.id]) {
+      clearTimeout(streamSaveTimers.current[msg.id]);
+    }
+    streamSaveTimers.current[msg.id] = setTimeout(() => {
+      persistMsg(msg);
+      delete streamSaveTimers.current[msg.id];
+    }, 3000);
+  }, [persistMsg]);
 
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
@@ -94,6 +122,48 @@ export default function App() {
   useEffect(() => {
     projects.forEach(p => loadTasks(p.id));
   }, [projects, loadTasks]);
+
+  // Load persisted chat messages on mount
+  useEffect(() => {
+    fetchChatMessages().then(rows => {
+      if (rows.length > 0) {
+        const msgs: ChatMessage[] = rows.map(r => ({
+          id: r.id,
+          taskId: r.taskId,
+          projectId: r.projectId,
+          projectName: r.projectName,
+          type: r.type as ChatMessage['type'],
+          content: r.content,
+          quoteMessageId: r.quoteMessageId,
+          decision: r.decision as Decision | undefined,
+          round: r.round,
+          timestamp: r.timestamp,
+        }));
+        setChatMessages(msgs);
+      }
+    }).catch(() => {}); // server may not be ready yet
+  }, []);
+
+  // Sync chat messages to server for persistence
+  const prevMsgSnap = useRef<{ ids: Set<string>; contents: Map<string, string>; types: Map<string, string> }>({ ids: new Set(), contents: new Map(), types: new Map() });
+  useEffect(() => {
+    const prev = prevMsgSnap.current;
+    for (const msg of chatMessages) {
+      if (!prev.ids.has(msg.id)) {
+        // New message — save immediately
+        persistMsg(msg);
+      } else if (prev.contents.get(msg.id) !== msg.content || prev.types.get(msg.id) !== msg.type) {
+        // Modified (streaming content or type change) — debounced save
+        persistMsgDebounced(msg);
+      }
+    }
+    // Update snapshot
+    prevMsgSnap.current = {
+      ids: new Set(chatMessages.map(m => m.id)),
+      contents: new Map(chatMessages.map(m => [m.id, m.content])),
+      types: new Map(chatMessages.map(m => [m.id, m.type])),
+    };
+  }, [chatMessages, persistMsg, persistMsgDebounced]);
 
   useWebSocket(useCallback((msg: WsMessage) => {
     if (msg.type === 'task_updated' || msg.type === 'task_created') {

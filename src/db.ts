@@ -69,5 +69,21 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_decisions_task ON decisions(task_id);
     CREATE INDEX IF NOT EXISTS idx_decisions_unresolved ON decisions(task_id) WHERE answer IS NULL;
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      project_name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('user_message','ai_execution','ai_decision','ai_review','system')),
+      content TEXT NOT NULL DEFAULT '',
+      quote_message_id TEXT,
+      decision_json TEXT,
+      round INTEGER NOT NULL DEFAULT 0,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp);
   `);
 }

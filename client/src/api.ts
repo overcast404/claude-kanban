@@ -75,3 +75,21 @@ export interface LogResponse {
 }
 export const fetchTaskLogs = (taskId: string, offset: number) =>
   request<LogResponse>(`/tasks/${taskId}/logs?offset=${offset}`);
+
+// Chat messages
+export interface ChatMessageRow {
+  id: string;
+  taskId: string;
+  projectId: string;
+  projectName: string;
+  type: string;
+  content: string;
+  quoteMessageId?: string;
+  decision?: unknown;
+  round: number;
+  timestamp: string;
+}
+export const fetchChatMessages = () =>
+  request<ChatMessageRow[]>('/chat-messages');
+export const saveChatMessage = (msg: ChatMessageRow) =>
+  request<{ ok: boolean }>('/chat-messages', { method: 'POST', body: JSON.stringify(msg) });

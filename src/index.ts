@@ -9,6 +9,7 @@ import { hooksRouter } from './routes/hooks';
 import { mcpRouter } from './routes/mcp';
 import { filesystemRouter } from './routes/filesystem';
 import { networkRouter } from './routes/network';
+import { chatRouter } from './routes/chat';
 import { setBroadcast } from './broadcast';
 import { WsMessage } from './types';
 
@@ -33,6 +34,7 @@ export function createApp(config: AppConfig) {
   app.use('/mcp', mcpRouter);
   app.use('/api/filesystem', filesystemRouter);
   app.use('/api/network-info', networkRouter);
+  app.use('/api/chat-messages', chatRouter);
 
   app.use(express.static(staticDir));
   app.get('*', (_req, res) => {
