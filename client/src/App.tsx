@@ -103,6 +103,7 @@ export default function App() {
   const [quoteTarget, setQuoteTarget] = useState<ChatMessage | null>(null);
   const lastTaskStatus = useRef<Record<string, TaskStatus>>({});
   const taskRounds = useRef<Record<string, number>>({});
+  const taskLastUserMsg = useRef<Record<string, string>>({});
 
   const [detailVisible, setDetailVisible] = useState(true);
   const [detailWidth, setDetailWidth] = useState(50);
@@ -146,6 +147,12 @@ export default function App() {
           round: r.round,
           timestamp: r.timestamp,
         }));
+        // Restore taskLastUserMsg from loaded messages
+        for (const m of msgs) {
+          if (m.type === 'user_message' && m.taskId) {
+            taskLastUserMsg.current[m.taskId] = m.id;
+          }
+        }
         setChatMessages(msgs);
       }
     }).catch(() => {}); // server may not be ready yet
@@ -240,6 +247,7 @@ export default function App() {
           projectName: pName,
           type: 'ai_execution',
           content: '',
+          quoteMessageId: taskLastUserMsg.current[task.id],
           round: 0,
           timestamp: new Date().toISOString(),
         }]);
@@ -254,6 +262,7 @@ export default function App() {
           projectName: pName,
           type: 'ai_execution',
           content: '',
+          quoteMessageId: taskLastUserMsg.current[task.id],
           round,
           timestamp: new Date().toISOString(),
         }]);
@@ -273,6 +282,7 @@ export default function App() {
             projectName: pName,
             type: 'ai_decision',
             content: '',
+            quoteMessageId: taskLastUserMsg.current[task.id],
             round: taskRounds.current[task.id] || 0,
             timestamp: new Date().toISOString(),
           }];
@@ -288,6 +298,7 @@ export default function App() {
           projectName: pName,
           type: 'ai_review',
           content: task.summary || '任务已完成',
+          quoteMessageId: taskLastUserMsg.current[task.id],
           round: taskRounds.current[task.id] || 0,
           timestamp: new Date().toISOString(),
         }]);
@@ -335,6 +346,7 @@ export default function App() {
           type: 'ai_decision',
           content: decision.question,
           decision,
+          quoteMessageId: taskLastUserMsg.current[task.id],
           round: taskRounds.current[task.id] || 0,
           timestamp: new Date().toISOString(),
         }];
@@ -427,6 +439,7 @@ export default function App() {
       userMsg.taskId = task.id;
       setChatMessages(prev => [...prev, userMsg]);
       lastTaskStatus.current[task.id] = 'pending';
+      taskLastUserMsg.current[task.id] = userMsg.id;
       await startTask(task.id);
       loadProjects();
       loadTasks(project.id);
@@ -457,6 +470,7 @@ export default function App() {
       timestamp: new Date().toISOString(),
     };
     setChatMessages(prev => [...prev, replyMsg]);
+    taskLastUserMsg.current[msg.taskId] = replyMsg.id;
 
     try {
       await submitDecision(msg.taskId, finalAnswer);
@@ -504,6 +518,7 @@ export default function App() {
       timestamp: new Date().toISOString(),
     };
     setChatMessages(prev => [...prev, rejectMsg]);
+    taskLastUserMsg.current[msg.taskId] = rejectMsg.id;
 
     try {
       await rejectTask(msg.taskId, feedback);

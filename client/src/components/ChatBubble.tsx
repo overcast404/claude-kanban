@@ -72,6 +72,13 @@ export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQu
   return (
     <div className="flex justify-start px-3">
       <div className={`group relative border ${borderStyle} ${!isReview ? 'bg-white' : ''} px-3 py-2.5 rounded-xl rounded-bl-sm max-w-[75%] text-[13px] leading-relaxed shadow-sm`}>
+        {/* Quote reference — shows which user message this AI bubble replies to */}
+        {message.quoteMessageId && (
+          <div className="text-[10px] text-warm-text-secondary mb-1.5 border-l-2 border-warm-border pl-2 italic">
+            ↩ 回复你的消息
+          </div>
+        )}
+
         <div className="flex items-center gap-2 mb-1.5">
           <span className="font-semibold text-[11px] text-warm-brown">🤖 {label}</span>
           {statusBadge && (
