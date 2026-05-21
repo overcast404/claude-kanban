@@ -24,6 +24,7 @@ interface Props {
   onQuoteReply: (msg: ChatMessage) => void;
   onThreadOpen: (taskId: string) => void;
   onProjectClick: (projectName: string) => void;
+  mentionPrefill: { name: string; n: number } | null;
 }
 
 export function ChatPanel(props: Props) {
@@ -47,6 +48,7 @@ export function ChatPanel(props: Props) {
           quoteTarget={props.quoteTarget}
           onCancelQuote={props.onCancelQuote}
           onSend={props.onSend}
+          mentionPrefill={props.mentionPrefill}
         />
       </div>
     </div>

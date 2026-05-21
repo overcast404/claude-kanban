@@ -8,9 +8,10 @@ interface Props {
   quoteTarget: ChatMessage | null;
   onCancelQuote: () => void;
   onSend: (text: string, quoteMessageId?: string) => void;
+  mentionPrefill: { name: string; n: number } | null;
 }
 
-export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Props) {
+export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentionPrefill }: Props) {
   const [text, setText] = useState('');
   const [showMention, setShowMention] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -31,6 +32,14 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
     }
     setMentionIndex(0);
   }, [text]);
+
+  // Prefill @mention when project clicked in sidebar
+  useEffect(() => {
+    if (mentionPrefill) {
+      setText(`@${mentionPrefill.name} `);
+      inputRef.current?.focus();
+    }
+  }, [mentionPrefill]);
 
   const insertMention = (projectName: string) => {
     const newText = text.replace(/@\S*$/, `@${projectName} `);

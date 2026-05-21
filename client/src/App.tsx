@@ -659,8 +659,10 @@ export default function App() {
     setQuoteTarget(null);
   }, []);
 
-  const handleChatProjectClick = useCallback((_projectName: string) => {
-    // User clicked a project in sidebar — ChatInput handles @mention independently
+  const [mentionPrefill, setMentionPrefill] = useState<{ name: string; n: number } | null>(null);
+
+  const handleChatProjectClick = useCallback((projectName: string) => {
+    setMentionPrefill(p => ({ name: projectName, n: (p?.n || 0) + 1 }));
   }, []);
 
   const handleThreadOpen = useCallback((taskId: string) => {
@@ -780,6 +782,7 @@ export default function App() {
                 onQuoteReply={handleQuoteReply}
                 onThreadOpen={handleThreadOpen}
                 onProjectClick={handleChatProjectClick}
+                mentionPrefill={mentionPrefill}
               />
               {threadTaskId && <ThreadPanel taskId={threadTaskId} taskTitle={threadTitle} messages={chatMessages} onClose={handleThreadClose} />}
             </>
