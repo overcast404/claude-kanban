@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ChatMessage } from '../App';
 import { Icon } from './Icon';
 
@@ -37,6 +38,8 @@ function QuoteRef({ text, onClick }: { text: string; onClick?: () => void }) {
 
 export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
   const { type, projectName, content, round } = message;
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customText, setCustomText] = useState('');
 
   if (type === 'system') {
     return (
@@ -117,24 +120,55 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
         {/* Decision content */}
         {isDecision && (
           <>
-            <div className="mb-2 whitespace-pre-wrap">{content}</div>
+            <div className="mb-2 whitespace-pre-wrap text-[12px]">{content}</div>
             {message.decision?.options && Array.isArray(message.decision.options) && message.decision.options.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="space-y-1">
                 {message.decision.options.map((opt, i) => (
                   <button
                     key={i}
                     onClick={() => onDecisionClick(message, opt.label)}
-                    className="px-3 py-1.5 bg-warm-brown text-white rounded-md text-[11px] hover:bg-warm-brown/90 transition-colors"
+                    className="w-full text-left p-2 border border-warm-border rounded-lg hover:border-warm-brown transition-colors bg-white"
                   >
-                    {opt.label}
+                    <div className="text-[11px] font-semibold text-warm-text">
+                      {String.fromCharCode(65 + i)} · {opt.label}
+                    </div>
+                    {opt.description && (
+                      <div className="text-[10px] text-warm-text-secondary mt-0.5 leading-relaxed">{opt.description}</div>
+                    )}
                   </button>
                 ))}
-                <button
-                  onClick={() => onDecisionClick(message, '__custom__')}
-                  className="px-3 py-1.5 border border-dashed border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
-                >
-                  ✍️ 自定义
-                </button>
+                {/* Custom answer: inline editing */}
+                {customOpen ? (
+                  <div className="flex gap-1.5 pt-1">
+                    <input
+                      autoFocus
+                      value={customText}
+                      onChange={e => setCustomText(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && customText.trim()) {
+                          onDecisionClick(message, customText.trim());
+                        }
+                        if (e.key === 'Escape') { setCustomOpen(false); setCustomText(''); }
+                      }}
+                      placeholder="输入你的回答..."
+                      className="flex-1 px-2 py-1.5 border border-warm-border rounded-md text-[11px] outline-none focus:border-warm-brown"
+                    />
+                    <button
+                      onClick={() => { if (customText.trim()) onDecisionClick(message, customText.trim()); }}
+                      disabled={!customText.trim()}
+                      className="px-3 py-1.5 bg-warm-brown text-white rounded-md text-[11px] disabled:opacity-40 hover:bg-warm-brown/90 transition-colors"
+                    >
+                      发送
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setCustomOpen(true)}
+                    className="w-full text-left p-2 border border-dashed border-warm-border rounded-lg hover:border-warm-brown transition-colors"
+                  >
+                    <div className="text-[11px] text-warm-text-secondary">✍️ 其他想法...</div>
+                  </button>
+                )}
               </div>
             )}
           </>

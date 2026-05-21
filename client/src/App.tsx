@@ -508,11 +508,7 @@ export default function App() {
   }, [projects, loadProjects, loadTasks, chatMessages, handleRefresh]);
 
   const handleChatDecision = useCallback(async (msg: ChatMessage, answer: string) => {
-    let finalAnswer = answer;
-    if (answer === '__custom__') {
-      finalAnswer = prompt('输入你的回答:') || '';
-      if (!finalAnswer) return;
-    }
+    if (!answer) return;
 
     const quoteContent = msg.content.slice(0, 100);
     const replyMsg: ChatMessage = {
@@ -521,7 +517,7 @@ export default function App() {
       projectId: msg.projectId,
       projectName: msg.projectName,
       type: 'user_message',
-      content: '↩ ' + quoteContent + '\n' + finalAnswer,
+      content: '↩ ' + quoteContent + '\n' + answer,
       quoteMessageId: msg.id,
       round: msg.round,
       timestamp: new Date().toISOString(),
@@ -530,7 +526,7 @@ export default function App() {
     taskLastUserMsg.current[msg.taskId] = replyMsg.id;
 
     try {
-      await submitDecision(msg.taskId, finalAnswer);
+      await submitDecision(msg.taskId, answer);
       handleRefresh(msg.projectId);
     } catch (err) {
       console.error('Decision submit failed:', err);
