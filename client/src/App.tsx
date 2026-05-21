@@ -161,15 +161,16 @@ export default function App() {
   }, []);
 
   // Sync chat messages to server for persistence
-  const prevMsgSnap = useRef<{ ids: Set<string>; contents: Map<string, string>; types: Map<string, string> }>({ ids: new Set(), contents: new Map(), types: new Map() });
+  const prevMsgSnap = useRef<{ ids: Set<string>; contents: Map<string, string>; types: Map<string, string>; decisions: Map<string, string> }>({ ids: new Set(), contents: new Map(), types: new Map(), decisions: new Map() });
   useEffect(() => {
     const prev = prevMsgSnap.current;
     for (const msg of chatMessages) {
+      const decJson = msg.decision ? JSON.stringify(msg.decision) : '';
       if (!prev.ids.has(msg.id)) {
         // New message — save immediately
         persistMsg(msg);
-      } else if (prev.contents.get(msg.id) !== msg.content || prev.types.get(msg.id) !== msg.type) {
-        // Modified (streaming content or type change) — debounced save
+      } else if (prev.contents.get(msg.id) !== msg.content || prev.types.get(msg.id) !== msg.type || prev.decisions.get(msg.id) !== decJson) {
+        // Modified (content, type, or decision change) — debounced save
         persistMsgDebounced(msg);
       }
     }
@@ -178,6 +179,7 @@ export default function App() {
       ids: new Set(chatMessages.map(m => m.id)),
       contents: new Map(chatMessages.map(m => [m.id, m.content])),
       types: new Map(chatMessages.map(m => [m.id, m.type])),
+      decisions: new Map(chatMessages.map(m => [m.id, m.decision ? JSON.stringify(m.decision) : ''])),
     };
   }, [chatMessages, persistMsg, persistMsgDebounced]);
 
@@ -271,11 +273,12 @@ export default function App() {
       }
 
       if (task.status === 'deciding') {
-        // Create new ai_decision bubble — unless decision_created already created one
+        // Create new ai_decision bubble — unless there's already an unresolved one
         setChatMessages(prev => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.taskId === task.id && lastMsg.type === 'ai_decision') {
-            return prev; // already created by decision_created
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].taskId === task.id && prev[i].type === 'ai_decision' && !prev[i].decision) {
+              return prev; // unresolved bubble already waiting
+            }
           }
           return [...prev, {
             id: chatMsgId(),
@@ -331,15 +334,20 @@ export default function App() {
       const proj = projectsRef.current.find(p => p.id === task.project_id);
       const pName = proj?.name || task.project_id;
       setChatMessages(prev => {
-        // Try to find an existing ai_decision bubble (created by task_updated)
+        // Find the latest unresolved ai_decision (empty, created by task_updated) and populate it.
+        // If already resolved (has decision data + user reply after it), create a new one.
         for (let i = prev.length - 1; i >= 0; i--) {
           if (prev[i].taskId === task.id && prev[i].type === 'ai_decision') {
-            const updated = [...prev];
-            updated[i] = { ...updated[i], content: decision.question, decision };
-            return updated;
+            if (!prev[i].decision) {
+              // Unresolved — populate with decision data
+              const updated = [...prev];
+              updated[i] = { ...updated[i], content: decision.question, decision };
+              return updated;
+            }
+            // Already has decision data — create new bubble instead of overwriting
+            break;
           }
         }
-        // No bubble yet — create one with the decision data attached
         return [...prev, {
           id: chatMsgId(),
           taskId: task.id,
