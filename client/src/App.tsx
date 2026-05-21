@@ -513,12 +513,14 @@ export default function App() {
       }
     }
 
-    // Otherwise create a new task via @mention
-    const atMatch = text.match(/^@(\S+)\s+(.+)/);
-    if (!atMatch) return;
-    const [, projectName, description] = atMatch;
-    const project = projects.find(p => p.name === projectName);
+    // Otherwise create a new task via @mention (supports multi-word project names)
+    if (!text.startsWith('@')) return;
+    const afterAt = text.slice(1);
+    const sorted = [...projects].sort((a, b) => b.name.length - a.name.length);
+    const project = sorted.find(p => afterAt.startsWith(p.name + ' '));
     if (!project) return;
+    const description = afterAt.slice(project.name.length).trim();
+    if (!description) return;
 
     const userMsg: ChatMessage = {
       id: chatMsgId(),
