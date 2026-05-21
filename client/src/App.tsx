@@ -329,7 +329,14 @@ export default function App() {
     }
 
     if (msg.type === 'decision_created') {
-      const { task, decision } = msg.payload as { task: Task; decision: Decision };
+      const { task, decision: rawDecision } = msg.payload as { task: Task; decision: Decision };
+      // Parse options if stored as JSON string (DB TEXT column issue)
+      const decision = {
+        ...rawDecision,
+        options: typeof rawDecision.options === 'string'
+          ? JSON.parse(rawDecision.options as string)
+          : rawDecision.options,
+      };
       lastTaskStatus.current[task.id] = 'deciding';
       const proj = projectsRef.current.find(p => p.id === task.project_id);
       const pName = proj?.name || task.project_id;
