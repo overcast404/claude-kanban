@@ -22,15 +22,14 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
   );
 
   useEffect(() => {
-    // Detect @mention pattern: @ followed by non-whitespace at end of input
     const atMatch = text.match(/@(\S*)$/);
     if (atMatch) {
       setShowMention(true);
       setMentionFilter(atMatch[1]);
-      setMentionIndex(0);
     } else {
       setShowMention(false);
     }
+    setMentionIndex(0);
   }, [text]);
 
   const insertMention = (projectName: string) => {
@@ -40,8 +39,21 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
     inputRef.current?.focus();
   };
 
+  const safeIndex = Math.min(mentionIndex, Math.max(0, filteredProjects.length - 1));
+
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (showMention && filteredProjects.length > 0) {
+    if (showMention) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMention(false);
+        return;
+      }
+      if (filteredProjects.length === 0) {
+        if (e.key === 'Enter') {
+          e.preventDefault(); // block send when mention has no match
+        }
+        return;
+      }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setMentionIndex(i => Math.min(i + 1, filteredProjects.length - 1));
@@ -50,9 +62,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
         setMentionIndex(i => Math.max(i - 1, 0));
       } else if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        insertMention(filteredProjects[mentionIndex].name);
-      } else if (e.key === 'Escape') {
-        setShowMention(false);
+        insertMention(filteredProjects[safeIndex].name);
       }
       return;
     }
@@ -93,7 +103,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
             <button
               key={p.id}
               className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-gray-50 flex items-center gap-2 ${
-                i === mentionIndex ? 'bg-gray-50' : ''
+                i === safeIndex ? 'bg-gray-50' : ''
               }`}
               onMouseDown={(e) => {
                 e.preventDefault(); // prevent input blur
@@ -115,6 +125,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
+          onBlur={() => setTimeout(() => setShowMention(false), 150)}
           placeholder="@项目名 描述你要做的事情..."
           className="flex-1 px-3 py-2 border border-warm-border rounded-lg text-[13px] outline-none focus:border-warm-brown transition-colors placeholder:text-gray-300"
         />
