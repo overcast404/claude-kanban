@@ -41,7 +41,12 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
 
   const safeIndex = Math.min(mentionIndex, Math.max(0, filteredProjects.length - 1));
 
+  const isComposing = useRef(false);
+
   const handleKeyDown = (e: KeyboardEvent) => {
+    // Don't send while IME is composing (e.g. Chinese pinyin → Enter to confirm)
+    if (isComposing.current || e.nativeEvent.isComposing) return;
+
     if (showMention) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -125,6 +130,8 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend }: Prop
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
+          onCompositionStart={() => { isComposing.current = true; }}
+          onCompositionEnd={() => { isComposing.current = false; }}
           onBlur={() => setTimeout(() => setShowMention(false), 150)}
           placeholder="@项目名 描述你要做的事情..."
           className="flex-1 px-3 py-2 border border-warm-border rounded-lg text-[13px] outline-none focus:border-warm-brown transition-colors placeholder:text-gray-300"
