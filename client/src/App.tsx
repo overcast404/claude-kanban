@@ -53,7 +53,9 @@ function useMediaQuery(query: string) {
 
 export default function App() {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const [activeTab, setActiveTab] = useState<Tab>('action');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    try { return (localStorage.getItem('ck_tab') as Tab) || 'action'; } catch { return 'action'; }
+  });
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
   const [taskOutputs, setTaskOutputs] = useState<Record<string, { stream: string; text: string }[]>>({});
@@ -118,6 +120,11 @@ export default function App() {
   }, []);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
+
+  // Persist active tab across refreshes
+  useEffect(() => {
+    try { localStorage.setItem('ck_tab', activeTab); } catch {}
+  }, [activeTab]);
 
   useEffect(() => {
     projects.forEach(p => loadTasks(p.id));
