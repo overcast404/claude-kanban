@@ -60,6 +60,7 @@ export default function App() {
   const [taskActivities, setTaskActivities] = useState<Record<string, string>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const parsersRef = useRef<Record<string, ChunkParser>>({});
+  const chatParsersRef = useRef<Record<string, ChunkParser>>({});
 
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
@@ -259,20 +260,34 @@ export default function App() {
 
     if (msg.type === 'task_output') {
       const payload = msg.payload as TaskOutputPayload;
-      // Append output text to latest ai_execution bubble for this task
-      setChatMessages(prev => {
-        const updated = [...prev];
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].taskId === payload.taskId && updated[i].type === 'ai_execution') {
-            updated[i] = {
-              ...updated[i],
-              content: updated[i].content + payload.text,
-            };
-            break;
-          }
+      // Parse output for chat: show concise activity like "Read: src/foo.ts"
+      if (payload.stream === 'stdout') {
+        if (!chatParsersRef.current[payload.taskId]) {
+          chatParsersRef.current[payload.taskId] = createChunkParser();
         }
-        return updated;
-      });
+        const activity = chatParsersRef.current[payload.taskId].feed(payload.text);
+        if (activity) {
+          setChatMessages(prev => {
+            const updated = [...prev];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].taskId === payload.taskId && updated[i].type === 'ai_execution') {
+                const existing = updated[i].content;
+                // Avoid duplicate consecutive identical lines
+                const lines = existing ? existing.split('\n') : [];
+                const lastLine = lines[lines.length - 1] || '';
+                if (activity !== lastLine) {
+                  updated[i] = {
+                    ...updated[i],
+                    content: existing ? existing + '\n' + activity : activity,
+                  };
+                }
+                break;
+              }
+            }
+            return updated;
+          });
+        }
+      }
     }
   }, [loadProjects, selectedTaskId]));
 
