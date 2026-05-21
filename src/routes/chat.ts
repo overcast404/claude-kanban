@@ -25,7 +25,7 @@ function rowToMsg(row: ChatMessageRow) {
     type: row.type,
     content: row.content,
     quoteMessageId: row.quote_message_id || undefined,
-    decision: row.decision_json ? JSON.parse(row.decision_json) : undefined,
+    decision: row.decision_json ? (() => { const d = JSON.parse(row.decision_json); if (typeof d.options === 'string') d.options = JSON.parse(d.options); return d; })() : undefined,
     round: row.round,
     timestamp: row.timestamp,
   };

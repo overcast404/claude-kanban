@@ -137,18 +137,29 @@ export default function App() {
   useEffect(() => {
     fetchChatMessages().then(rows => {
       if (rows.length > 0) {
-        const msgs: ChatMessage[] = rows.map(r => ({
-          id: r.id,
-          taskId: r.taskId,
-          projectId: r.projectId,
-          projectName: r.projectName,
-          type: r.type as ChatMessage['type'],
-          content: r.content,
-          quoteMessageId: r.quoteMessageId,
-          decision: r.decision as Decision | undefined,
-          round: r.round,
-          timestamp: r.timestamp,
-        }));
+        const msgs: ChatMessage[] = rows.map(r => {
+          // Fix double-encoded options string from DB
+          let decision: Decision | undefined;
+          if (r.decision) {
+            const raw = r.decision as Record<string, unknown>;
+            decision = {
+              ...raw,
+              options: typeof raw.options === 'string' ? JSON.parse(raw.options as string) : raw.options,
+            } as Decision;
+          }
+          return {
+            id: r.id,
+            taskId: r.taskId,
+            projectId: r.projectId,
+            projectName: r.projectName,
+            type: r.type as ChatMessage['type'],
+            content: r.content,
+            quoteMessageId: r.quoteMessageId,
+            decision,
+            round: r.round,
+            timestamp: r.timestamp,
+          };
+        });
         // Restore taskLastUserMsg from loaded messages
         for (const m of msgs) {
           if (m.type === 'user_message' && m.taskId) {
