@@ -271,15 +271,8 @@ export default function App() {
             const updated = [...prev];
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].taskId === payload.taskId && updated[i].type === 'ai_execution') {
-                const existing = updated[i].content;
-                // Avoid duplicate consecutive identical lines
-                const lines = existing ? existing.split('\n') : [];
-                const lastLine = lines[lines.length - 1] || '';
-                if (activity !== lastLine) {
-                  updated[i] = {
-                    ...updated[i],
-                    content: existing ? existing + '\n' + activity : activity,
-                  };
+                if (activity !== updated[i].content) {
+                  updated[i] = { ...updated[i], content: activity };
                 }
                 break;
               }
