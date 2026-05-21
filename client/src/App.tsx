@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Project, Task, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
+import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
 import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask } from './api';
 import { useWebSocket } from './useWebSocket';
 import { TABS, type TabKey } from './status';
