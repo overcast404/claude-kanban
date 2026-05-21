@@ -15,6 +15,7 @@ import { EditTaskModal } from './components/EditTaskModal';
 import { ReviewModal } from './components/ReviewModal';
 import { createChunkParser, type ChunkParser } from './activity';
 import { ChatPanel } from './components/ChatPanel';
+import { ThreadPanel } from './components/ThreadPanel';
 
 type Tab = 'projects' | TabKey;
 
@@ -101,6 +102,7 @@ export default function App() {
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [quoteTarget, setQuoteTarget] = useState<ChatMessage | null>(null);
+  const [threadTaskId, setThreadTaskId] = useState<string | null>(null);
   const lastTaskStatus = useRef<Record<string, TaskStatus>>({});
   const taskRounds = useRef<Record<string, number>>({});
   const taskLastUserMsg = useRef<Record<string, string>>({});
@@ -541,6 +543,14 @@ export default function App() {
     // User clicked a project in sidebar — ChatInput handles @mention independently
   }, []);
 
+  const handleThreadOpen = useCallback((taskId: string) => {
+    setThreadTaskId(taskId);
+  }, []);
+
+  const handleThreadClose = useCallback(() => {
+    setThreadTaskId(null);
+  }, []);
+
   const allTasks = Object.values(tasks).flat();
   const selectedTask = allTasks.find(t => t.id === selectedTaskId) || null;
 
@@ -643,8 +653,20 @@ export default function App() {
               onApprove={handleChatApprove}
               onReject={handleChatReject}
               onQuoteReply={handleQuoteReply}
+              onThreadOpen={handleThreadOpen}
               onProjectClick={handleChatProjectClick}
             />
+            {threadTaskId && (
+              <ThreadPanel
+                taskId={threadTaskId}
+                taskTitle={(() => {
+                  const firstMsg = chatMessages.find(m => m.taskId === threadTaskId);
+                  return firstMsg ? (firstMsg.projectName + ' · ' + firstMsg.content.slice(0, 30)) : '';
+                })()}
+                messages={chatMessages}
+                onClose={handleThreadClose}
+              />
+            )}
           ) : (
             <div className="flex-1 min-w-0">
               <ListPanel

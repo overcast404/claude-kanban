@@ -22,6 +22,7 @@ interface Props {
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
+  onThreadOpen: (taskId: string) => void;
   onProjectClick: (projectName: string) => void;
 }
 
@@ -39,6 +40,7 @@ export function ChatPanel(props: Props) {
           onApprove={props.onApprove}
           onReject={props.onReject}
           onQuoteReply={props.onQuoteReply}
+          onThreadOpen={props.onThreadOpen}
         />
         <ChatInput
           projects={props.projects.map(p => ({ id: p.id, name: p.name }))}

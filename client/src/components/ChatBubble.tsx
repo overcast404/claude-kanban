@@ -3,10 +3,12 @@ import { Icon } from './Icon';
 
 interface Props {
   message: ChatMessage;
+  getQuotedMessage: (id: string) => ChatMessage | undefined;
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
+  onThreadOpen: (taskId: string) => void;
 }
 
 function QuoteReplyButton({ side, onClick }: { side: 'left' | 'right'; onClick: () => void }) {
@@ -21,7 +23,19 @@ function QuoteReplyButton({ side, onClick }: { side: 'left' | 'right'; onClick: 
   );
 }
 
-export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQuoteReply }: Props) {
+function QuoteRef({ text, onClick }: { text: string; onClick?: () => void }) {
+  return (
+    <div
+      className={`text-[10px] text-warm-text-secondary mb-1.5 border-l-2 border-warm-border pl-2 truncate ${onClick ? 'cursor-pointer hover:text-warm-brown hover:border-warm-brown transition-colors' : ''}`}
+      onClick={onClick}
+      title={onClick ? '点击查看完整对话' : undefined}
+    >
+      ↩ {text}
+    </div>
+  );
+}
+
+export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
   const { type, projectName, content, round } = message;
 
   if (type === 'system') {
@@ -57,7 +71,6 @@ export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQu
   let borderStyle = 'border-warm-border';
   let statusBadge: string | null = null;
   if (type === 'ai_execution') {
-    borderStyle = 'border-warm-border';
     statusBadge = '执行中';
   } else if (isDecision) {
     borderStyle = 'border-warm-brown';
@@ -69,14 +82,16 @@ export function ChatBubble({ message, onDecisionClick, onApprove, onReject, onQu
 
   const label = round > 0 ? `${projectName} · 继续执行` : projectName;
 
+  // Get the quoted message text for display
+  const quotedMsg = message.quoteMessageId ? getQuotedMessage(message.quoteMessageId) : undefined;
+  const quoteText = quotedMsg ? quotedMsg.content.split('\n')[0].slice(0, 50) : '';
+
   return (
     <div className="flex justify-start px-3">
       <div className={`group relative border ${borderStyle} ${!isReview ? 'bg-white' : ''} px-3 py-2.5 rounded-xl rounded-bl-sm max-w-[75%] text-[13px] leading-relaxed shadow-sm`}>
-        {/* Quote reference — shows which user message this AI bubble replies to */}
-        {message.quoteMessageId && (
-          <div className="text-[10px] text-warm-text-secondary mb-1.5 border-l-2 border-warm-border pl-2 italic">
-            ↩ 回复你的消息
-          </div>
+        {/* Quote reference with real text, clickable to open thread */}
+        {quoteText && (
+          <QuoteRef text={quoteText} onClick={() => onThreadOpen(message.taskId)} />
         )}
 
         <div className="flex items-center gap-2 mb-1.5">

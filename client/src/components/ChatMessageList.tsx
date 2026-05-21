@@ -8,14 +8,17 @@ interface Props {
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
+  onThreadOpen: (taskId: string) => void;
 }
 
-export function ChatMessageList({ messages, onDecisionClick, onApprove, onReject, onQuoteReply }: Props) {
+export function ChatMessageList({ messages, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, messages[messages.length - 1]?.content.length]);
+
+  const getQuotedMessage = (id: string) => messages.find(m => m.id === id);
 
   if (messages.length === 0) {
     return (
@@ -37,10 +40,12 @@ export function ChatMessageList({ messages, onDecisionClick, onApprove, onReject
         <ChatBubble
           key={msg.id}
           message={msg}
+          getQuotedMessage={getQuotedMessage}
           onDecisionClick={onDecisionClick}
           onApprove={onApprove}
           onReject={onReject}
           onQuoteReply={onQuoteReply}
+          onThreadOpen={onThreadOpen}
         />
       ))}
       <div ref={bottomRef} />
