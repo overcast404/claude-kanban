@@ -620,6 +620,10 @@ export default function App() {
     setActiveTab(tab);
   };
 
+  const threadTitle = threadTaskId
+    ? (() => { const m = chatMessages.find(x => x.taskId === threadTaskId); return m ? `${m.projectName} · ${m.content.slice(0, 30)}` : ''; })()
+    : '';
+
   return (
     <div ref={containerRef} className="flex h-screen overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -643,30 +647,22 @@ export default function App() {
               }}
             />
           ) : activeTab === 'chat' ? (
-            <ChatPanel
-              projects={projects}
-              messages={chatMessages}
-              quoteTarget={quoteTarget}
-              onCancelQuote={handleCancelQuote}
-              onSend={handleChatSend}
-              onDecisionClick={handleChatDecision}
-              onApprove={handleChatApprove}
-              onReject={handleChatReject}
-              onQuoteReply={handleQuoteReply}
-              onThreadOpen={handleThreadOpen}
-              onProjectClick={handleChatProjectClick}
-            />
-            {threadTaskId && (
-              <ThreadPanel
-                taskId={threadTaskId}
-                taskTitle={(() => {
-                  const firstMsg = chatMessages.find(m => m.taskId === threadTaskId);
-                  return firstMsg ? (firstMsg.projectName + ' · ' + firstMsg.content.slice(0, 30)) : '';
-                })()}
+            <>
+              <ChatPanel
+                projects={projects}
                 messages={chatMessages}
-                onClose={handleThreadClose}
+                quoteTarget={quoteTarget}
+                onCancelQuote={handleCancelQuote}
+                onSend={handleChatSend}
+                onDecisionClick={handleChatDecision}
+                onApprove={handleChatApprove}
+                onReject={handleChatReject}
+                onQuoteReply={handleQuoteReply}
+                onThreadOpen={handleThreadOpen}
+                onProjectClick={handleChatProjectClick}
               />
-            )}
+              {threadTaskId && <ThreadPanel taskId={threadTaskId} taskTitle={threadTitle} messages={chatMessages} onClose={handleThreadClose} />}
+            </>
           ) : (
             <div className="flex-1 min-w-0">
               <ListPanel
