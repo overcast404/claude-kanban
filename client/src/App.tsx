@@ -260,35 +260,37 @@ export default function App() {
       }
 
       if (task.status === 'deciding') {
-        // Convert latest ai_execution to ai_decision
+        // Create new ai_decision bubble — unless decision_created already created one
         setChatMessages(prev => {
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].taskId === task.id && updated[i].type === 'ai_execution') {
-              updated[i] = { ...updated[i], type: 'ai_decision' as const };
-              break;
-            }
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg && lastMsg.taskId === task.id && lastMsg.type === 'ai_decision') {
+            return prev; // already created by decision_created
           }
-          return updated;
+          return [...prev, {
+            id: chatMsgId(),
+            taskId: task.id,
+            projectId: task.project_id,
+            projectName: pName,
+            type: 'ai_decision',
+            content: '',
+            round: taskRounds.current[task.id] || 0,
+            timestamp: new Date().toISOString(),
+          }];
         });
       }
 
       if (task.status === 'reviewing') {
-        // Convert latest ai_execution to ai_review with summary
-        setChatMessages(prev => {
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].taskId === task.id && updated[i].type === 'ai_execution') {
-              updated[i] = {
-                ...updated[i],
-                type: 'ai_review' as const,
-                content: task.summary || updated[i].content || '任务已完成',
-              };
-              break;
-            }
-          }
-          return updated;
-        });
+        // Create new ai_review bubble as a "new message"
+        setChatMessages(prev => [...prev, {
+          id: chatMsgId(),
+          taskId: task.id,
+          projectId: task.project_id,
+          projectName: pName,
+          type: 'ai_review',
+          content: task.summary || '任务已完成',
+          round: taskRounds.current[task.id] || 0,
+          timestamp: new Date().toISOString(),
+        }]);
       }
 
       if (task.status === 'done') {
@@ -313,25 +315,29 @@ export default function App() {
     if (msg.type === 'decision_created') {
       const { task, decision } = msg.payload as { task: Task; decision: Decision };
       lastTaskStatus.current[task.id] = 'deciding';
-      // Attach decision data — the ai_decision bubble may have been created by
-      // task_updated(deciding), or we may need to convert ai_execution directly.
+      const proj = projectsRef.current.find(p => p.id === task.project_id);
+      const pName = proj?.name || task.project_id;
       setChatMessages(prev => {
-        const updated = [...prev];
-        // First try to find an existing ai_decision bubble
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].taskId === task.id && updated[i].type === 'ai_decision') {
+        // Try to find an existing ai_decision bubble (created by task_updated)
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].taskId === task.id && prev[i].type === 'ai_decision') {
+            const updated = [...prev];
             updated[i] = { ...updated[i], content: decision.question, decision };
             return updated;
           }
         }
-        // Fallback: convert the latest ai_execution to ai_decision directly
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].taskId === task.id && updated[i].type === 'ai_execution') {
-            updated[i] = { ...updated[i], type: 'ai_decision' as const, content: decision.question, decision };
-            return updated;
-          }
-        }
-        return updated;
+        // No bubble yet — create one with the decision data attached
+        return [...prev, {
+          id: chatMsgId(),
+          taskId: task.id,
+          projectId: task.project_id,
+          projectName: pName,
+          type: 'ai_decision',
+          content: decision.question,
+          decision,
+          round: taskRounds.current[task.id] || 0,
+          timestamp: new Date().toISOString(),
+        }];
       });
     }
 
