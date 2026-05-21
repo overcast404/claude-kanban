@@ -284,14 +284,22 @@ export default function App() {
       }
 
       if (task.status === 'deciding') {
-        // Create new ai_decision bubble — unless there's already an unresolved one
+        // Create new ai_decision bubble, remove latest ai_execution
         setChatMessages(prev => {
           for (let i = prev.length - 1; i >= 0; i--) {
             if (prev[i].taskId === task.id && prev[i].type === 'ai_decision' && !prev[i].decision) {
               return prev; // unresolved bubble already waiting
             }
           }
-          return [...prev, {
+          // Remove latest ai_execution for this task
+          let filtered = prev;
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].taskId === task.id && prev[i].type === 'ai_execution') {
+              filtered = prev.filter((_, idx) => idx !== i);
+              break;
+            }
+          }
+          return [...filtered, {
             id: chatMsgId(),
             taskId: task.id,
             projectId: task.project_id,
@@ -306,18 +314,27 @@ export default function App() {
       }
 
       if (task.status === 'reviewing') {
-        // Create new ai_review bubble as a "new message"
-        setChatMessages(prev => [...prev, {
-          id: chatMsgId(),
-          taskId: task.id,
-          projectId: task.project_id,
-          projectName: pName,
-          type: 'ai_review',
-          content: task.summary || '任务已完成',
-          quoteMessageId: taskLastUserMsg.current[task.id],
-          round: taskRounds.current[task.id] || 0,
-          timestamp: new Date().toISOString(),
-        }]);
+        // Create new ai_review bubble, remove latest ai_execution
+        setChatMessages(prev => {
+          let filtered = prev;
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].taskId === task.id && prev[i].type === 'ai_execution') {
+              filtered = prev.filter((_, idx) => idx !== i);
+              break;
+            }
+          }
+          return [...filtered, {
+            id: chatMsgId(),
+            taskId: task.id,
+            projectId: task.project_id,
+            projectName: pName,
+            type: 'ai_review',
+            content: task.summary || '任务已完成',
+            quoteMessageId: taskLastUserMsg.current[task.id],
+            round: taskRounds.current[task.id] || 0,
+            timestamp: new Date().toISOString(),
+          }];
+        });
       }
 
       if (task.status === 'done') {
@@ -543,6 +560,18 @@ export default function App() {
     setChatMessages(prev => [...prev, replyMsg]);
     taskLastUserMsg.current[msg.taskId] = replyMsg.id;
     lastTaskStatus.current[msg.taskId] = 'running'; // prevent WS duplicate
+
+    // Mark decision bubble as resolved (read-only with answer shown)
+    setChatMessages(prev => {
+      const updated = [...prev];
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (updated[i].id === msg.id && updated[i].type === 'ai_decision') {
+          updated[i] = { ...updated[i], decision: { ...updated[i].decision!, answer } };
+          break;
+        }
+      }
+      return updated;
+    });
 
     // Optimistically create a new AI execution bubble for the resumed work
     const exeRound = (taskRounds.current[msg.taskId] || 0) + 1;

@@ -118,61 +118,86 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
         )}
 
         {/* Decision content */}
-        {isDecision && (
-          <>
-            <div className="mb-2 whitespace-pre-wrap text-[12px]">{content}</div>
-            {message.decision?.options && Array.isArray(message.decision.options) && message.decision.options.length > 0 && (
-              <div className="space-y-1">
-                {message.decision.options.map((opt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => onDecisionClick(message, opt.label)}
-                    className="w-full text-left p-2 border border-warm-border rounded-lg hover:border-warm-brown transition-colors bg-white"
-                  >
-                    <div className="text-[11px] font-semibold text-warm-text">
-                      {String.fromCharCode(65 + i)} · {opt.label}
+        {isDecision && (() => {
+          const resolved = !!message.decision?.answer;
+          return (
+            <>
+              <div className="mb-2 whitespace-pre-wrap text-[12px]">{content}</div>
+              {message.decision?.options && Array.isArray(message.decision.options) && message.decision.options.length > 0 && (
+                <div className="space-y-1">
+                  {message.decision.options.map((opt, i) => {
+                    const isChosen = resolved && opt.label === message.decision!.answer;
+                    return (
+                      <button
+                        key={i}
+                        disabled={resolved}
+                        onClick={() => onDecisionClick(message, opt.label)}
+                        className={`w-full text-left p-2 border rounded-lg transition-colors ${
+                          isChosen
+                            ? 'border-warm-brown bg-warm-brown/5'
+                            : resolved
+                              ? 'border-gray-100 bg-gray-50 opacity-50'
+                              : 'border-warm-border bg-white hover:border-warm-brown'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {isChosen && <Icon name="check-circle" size={12} className="text-warm-brown shrink-0" />}
+                          <span className={`text-[11px] font-semibold ${isChosen ? 'text-warm-brown' : 'text-warm-text'}`}>
+                            {String.fromCharCode(65 + i)} · {opt.label}
+                          </span>
+                        </div>
+                        {opt.description && (
+                          <div className="text-[10px] text-warm-text-secondary mt-0.5 leading-relaxed">{opt.description}</div>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {/* Custom answer: inline editing (hidden when resolved) */}
+                  {resolved ? (
+                    message.decision!.answer && !message.decision!.options?.some(o => o.label === message.decision!.answer) ? (
+                      <div className="w-full text-left p-2 border border-warm-brown bg-warm-brown/5 rounded-lg">
+                        <div className="flex items-center gap-1.5">
+                          <Icon name="check-circle" size={12} className="text-warm-brown shrink-0" />
+                          <span className="text-[11px] font-semibold text-warm-brown">{message.decision!.answer}</span>
+                        </div>
+                      </div>
+                    ) : null
+                  ) : customOpen ? (
+                    <div className="flex gap-1.5 pt-1">
+                      <input
+                        autoFocus
+                        value={customText}
+                        onChange={e => setCustomText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && customText.trim()) {
+                            onDecisionClick(message, customText.trim());
+                          }
+                          if (e.key === 'Escape') { setCustomOpen(false); setCustomText(''); }
+                        }}
+                        placeholder="输入你的回答..."
+                        className="flex-1 px-2 py-1.5 border border-warm-border rounded-md text-[11px] outline-none focus:border-warm-brown"
+                      />
+                      <button
+                        onClick={() => { if (customText.trim()) onDecisionClick(message, customText.trim()); }}
+                        disabled={!customText.trim()}
+                        className="px-3 py-1.5 bg-warm-brown text-white rounded-md text-[11px] disabled:opacity-40 hover:bg-warm-brown/90 transition-colors"
+                      >
+                        发送
+                      </button>
                     </div>
-                    {opt.description && (
-                      <div className="text-[10px] text-warm-text-secondary mt-0.5 leading-relaxed">{opt.description}</div>
-                    )}
-                  </button>
-                ))}
-                {/* Custom answer: inline editing */}
-                {customOpen ? (
-                  <div className="flex gap-1.5 pt-1">
-                    <input
-                      autoFocus
-                      value={customText}
-                      onChange={e => setCustomText(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && customText.trim()) {
-                          onDecisionClick(message, customText.trim());
-                        }
-                        if (e.key === 'Escape') { setCustomOpen(false); setCustomText(''); }
-                      }}
-                      placeholder="输入你的回答..."
-                      className="flex-1 px-2 py-1.5 border border-warm-border rounded-md text-[11px] outline-none focus:border-warm-brown"
-                    />
+                  ) : (
                     <button
-                      onClick={() => { if (customText.trim()) onDecisionClick(message, customText.trim()); }}
-                      disabled={!customText.trim()}
-                      className="px-3 py-1.5 bg-warm-brown text-white rounded-md text-[11px] disabled:opacity-40 hover:bg-warm-brown/90 transition-colors"
+                      onClick={() => setCustomOpen(true)}
+                      className="w-full text-left p-2 border border-dashed border-warm-border rounded-lg hover:border-warm-brown transition-colors"
                     >
-                      发送
+                      <div className="text-[11px] text-warm-text-secondary">✍️ 其他想法...</div>
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setCustomOpen(true)}
-                    className="w-full text-left p-2 border border-dashed border-warm-border rounded-lg hover:border-warm-brown transition-colors"
-                  >
-                    <div className="text-[11px] text-warm-text-secondary">✍️ 其他想法...</div>
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        )}
+                  )}
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Review content */}
         {isReview && (
