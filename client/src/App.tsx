@@ -461,12 +461,30 @@ export default function App() {
         };
         setChatMessages(prev => [...prev, replyMsg]);
         taskLastUserMsg.current[quotedMsg.taskId] = replyMsg.id;
+        lastTaskStatus.current[quotedMsg.taskId] = 'running'; // prevent WS duplicate
+
+        // Optimistically create new AI execution bubble for resumed work
+        const exeRound = (taskRounds.current[quotedMsg.taskId] || 0) + 1;
+        taskRounds.current[quotedMsg.taskId] = exeRound;
+        const exeBubble: ChatMessage = {
+          id: chatMsgId(),
+          taskId: quotedMsg.taskId,
+          projectId: quotedMsg.projectId,
+          projectName: quotedMsg.projectName,
+          type: 'ai_execution',
+          content: '',
+          quoteMessageId: replyMsg.id,
+          round: exeRound,
+          timestamp: new Date().toISOString(),
+        };
+        setChatMessages(prev => [...prev, exeBubble]);
+
         try {
           await rejectTask(quotedMsg.taskId, text);
           handleRefresh(quotedMsg.projectId);
         } catch (err) {
           console.error('Reply failed:', err);
-          setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id));
+          setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id && m.id !== exeBubble.id));
         }
         setQuoteTarget(null);
         return;
@@ -524,13 +542,30 @@ export default function App() {
     };
     setChatMessages(prev => [...prev, replyMsg]);
     taskLastUserMsg.current[msg.taskId] = replyMsg.id;
+    lastTaskStatus.current[msg.taskId] = 'running'; // prevent WS duplicate
+
+    // Optimistically create a new AI execution bubble for the resumed work
+    const exeRound = (taskRounds.current[msg.taskId] || 0) + 1;
+    taskRounds.current[msg.taskId] = exeRound;
+    const exeBubble: ChatMessage = {
+      id: chatMsgId(),
+      taskId: msg.taskId,
+      projectId: msg.projectId,
+      projectName: msg.projectName,
+      type: 'ai_execution',
+      content: '',
+      quoteMessageId: replyMsg.id,
+      round: exeRound,
+      timestamp: new Date().toISOString(),
+    };
+    setChatMessages(prev => [...prev, exeBubble]);
 
     try {
       await submitDecision(msg.taskId, answer);
       handleRefresh(msg.projectId);
     } catch (err) {
       console.error('Decision submit failed:', err);
-      setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id));
+      setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id || m.id !== exeBubble.id));
     }
   }, [handleRefresh]);
 
