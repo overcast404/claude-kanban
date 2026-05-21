@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
-import { listProjects, listTasks, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask } from './api';
+import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask } from './api';
 import { useWebSocket } from './useWebSocket';
 import { TABS, type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
@@ -14,6 +14,7 @@ import { CreateProjectModal } from './components/CreateProjectModal';
 import { EditTaskModal } from './components/EditTaskModal';
 import { ReviewModal } from './components/ReviewModal';
 import { createChunkParser, type ChunkParser } from './activity';
+import { ChatPanel } from './components/ChatPanel';
 
 type Tab = 'projects' | TabKey;
 
@@ -59,6 +60,9 @@ export default function App() {
   const [taskActivities, setTaskActivities] = useState<Record<string, string>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const parsersRef = useRef<Record<string, ChunkParser>>({});
+
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -138,6 +142,138 @@ export default function App() {
         }
       }
     }
+
+    // === Chat: WS message to chat bubble mapping ===
+    if (msg.type === 'task_updated') {
+      const task = msg.payload as Task;
+      const prevStatus = lastTaskStatus.current[task.id];
+      lastTaskStatus.current[task.id] = task.status;
+
+      const proj = projectsRef.current.find(p => p.id === task.project_id);
+      const pName = proj?.name || task.project_id;
+
+      if (task.status === 'running' && (!prevStatus || prevStatus === 'pending')) {
+        // First execution — create ai_execution bubble
+        taskRounds.current[task.id] = 0;
+        setChatMessages(prev => [...prev, {
+          id: chatMsgId(),
+          taskId: task.id,
+          projectId: task.project_id,
+          projectName: pName,
+          type: 'ai_execution',
+          content: '',
+          round: 0,
+          timestamp: new Date().toISOString(),
+        }]);
+      } else if (task.status === 'running' && prevStatus && prevStatus !== 'pending' && prevStatus !== 'running') {
+        // Resumed after deciding or rejected — new AI execution bubble with incremented round
+        const round = (taskRounds.current[task.id] || 0) + 1;
+        taskRounds.current[task.id] = round;
+        setChatMessages(prev => [...prev, {
+          id: chatMsgId(),
+          taskId: task.id,
+          projectId: task.project_id,
+          projectName: pName,
+          type: 'ai_execution',
+          content: '',
+          round,
+          timestamp: new Date().toISOString(),
+        }]);
+      }
+
+      if (task.status === 'deciding') {
+        // Convert latest ai_execution to ai_decision
+        setChatMessages(prev => {
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].taskId === task.id && updated[i].type === 'ai_execution') {
+              updated[i] = { ...updated[i], type: 'ai_decision' as const };
+              break;
+            }
+          }
+          return updated;
+        });
+      }
+
+      if (task.status === 'reviewing') {
+        // Convert latest ai_execution to ai_review with summary
+        setChatMessages(prev => {
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].taskId === task.id && updated[i].type === 'ai_execution') {
+              updated[i] = {
+                ...updated[i],
+                type: 'ai_review' as const,
+                content: task.summary || updated[i].content || '任务已完成',
+              };
+              break;
+            }
+          }
+          return updated;
+        });
+      }
+
+      if (task.status === 'done') {
+        setChatMessages(prev => [...prev, {
+          id: chatMsgId(),
+          taskId: task.id,
+          projectId: task.project_id,
+          projectName: pName,
+          type: 'system',
+          content: `✅ ${pName} 任务完成`,
+          round: taskRounds.current[task.id] || 0,
+          timestamp: new Date().toISOString(),
+        }]);
+      }
+    }
+
+    if (msg.type === 'task_created') {
+      const task = msg.payload as Task;
+      lastTaskStatus.current[task.id] = 'pending';
+    }
+
+    if (msg.type === 'decision_created') {
+      const { task, decision } = msg.payload as { task: Task; decision: Decision };
+      lastTaskStatus.current[task.id] = 'deciding';
+      // Attach decision data — the ai_decision bubble may have been created by
+      // task_updated(deciding), or we may need to convert ai_execution directly.
+      setChatMessages(prev => {
+        const updated = [...prev];
+        // First try to find an existing ai_decision bubble
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].taskId === task.id && updated[i].type === 'ai_decision') {
+            updated[i] = { ...updated[i], content: decision.question, decision };
+            return updated;
+          }
+        }
+        // Fallback: convert the latest ai_execution to ai_decision directly
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].taskId === task.id && updated[i].type === 'ai_execution') {
+            updated[i] = { ...updated[i], type: 'ai_decision' as const, content: decision.question, decision };
+            return updated;
+          }
+        }
+        return updated;
+      });
+    }
+
+    if (msg.type === 'task_output') {
+      const payload = msg.payload as TaskOutputPayload;
+      // Append output text to latest ai_execution bubble for this task
+      setChatMessages(prev => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].taskId === payload.taskId && updated[i].type === 'ai_execution') {
+            updated[i] = {
+              ...updated[i],
+              content: updated[i].content + payload.text,
+            };
+            break;
+          }
+        }
+        return updated;
+      });
+    }
   }, [loadProjects, selectedTaskId]));
 
   useEffect(() => {
@@ -174,6 +310,130 @@ export default function App() {
     }
     loadProjects();
   };
+
+  // === Chat: user action handlers ===
+  const handleChatSend = useCallback(async (text: string, quoteMessageId?: string) => {
+    const atMatch = text.match(/^@(\S+)\s+(.+)/);
+    if (!atMatch) return;
+    const [, projectName, description] = atMatch;
+    const project = projects.find(p => p.name === projectName);
+    if (!project) return;
+
+    const userMsg: ChatMessage = {
+      id: chatMsgId(),
+      taskId: '',  // temporary, will update after creation
+      projectId: project.id,
+      projectName: project.name,
+      type: 'user_message',
+      content: text,
+      quoteMessageId,
+      round: 0,
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      const task = await createTask(project.id, { title: description.slice(0, 80), description });
+      userMsg.taskId = task.id;
+      setChatMessages(prev => [...prev, userMsg]);
+      lastTaskStatus.current[task.id] = 'pending';
+      await startTask(task.id);
+      loadProjects();
+      loadTasks(project.id);
+    } catch (err) {
+      console.error('Chat send failed:', err);
+      // Remove the optimistic message on failure
+      setChatMessages(prev => prev.filter(m => m.id !== userMsg.id));
+    }
+  }, [projects, loadProjects, loadTasks]);
+
+  const handleChatDecision = useCallback(async (msg: ChatMessage, answer: string) => {
+    let finalAnswer = answer;
+    if (answer === '__custom__') {
+      finalAnswer = prompt('输入你的回答:') || '';
+      if (!finalAnswer) return;
+    }
+
+    const quoteContent = msg.content.slice(0, 100);
+    const replyMsg: ChatMessage = {
+      id: chatMsgId(),
+      taskId: msg.taskId,
+      projectId: msg.projectId,
+      projectName: msg.projectName,
+      type: 'user_message',
+      content: '↩ ' + quoteContent + '\n' + finalAnswer,
+      quoteMessageId: msg.id,
+      round: msg.round,
+      timestamp: new Date().toISOString(),
+    };
+    setChatMessages(prev => [...prev, replyMsg]);
+
+    try {
+      await submitDecision(msg.taskId, finalAnswer);
+      handleRefresh(msg.projectId);
+    } catch (err) {
+      console.error('Decision submit failed:', err);
+      setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id));
+    }
+  }, [handleRefresh]);
+
+  const handleChatApprove = useCallback(async (msg: ChatMessage) => {
+    const systemMsg: ChatMessage = {
+      id: chatMsgId(),
+      taskId: msg.taskId,
+      projectId: msg.projectId,
+      projectName: msg.projectName,
+      type: 'system',
+      content: `✅ ${msg.projectName} 任务已批准完成`,
+      round: msg.round,
+      timestamp: new Date().toISOString(),
+    };
+    setChatMessages(prev => [...prev, systemMsg]);
+
+    try {
+      await approveTask(msg.taskId);
+      handleRefresh(msg.projectId);
+    } catch (err) {
+      console.error('Approve failed:', err);
+      setChatMessages(prev => prev.filter(m => m.id !== systemMsg.id));
+    }
+  }, [handleRefresh]);
+
+  const handleChatReject = useCallback(async (msg: ChatMessage) => {
+    const feedback = prompt('输入驳回原因（可选，留空直接驳回）:') || '';
+
+    const rejectMsg: ChatMessage = {
+      id: chatMsgId(),
+      taskId: msg.taskId,
+      projectId: msg.projectId,
+      projectName: msg.projectName,
+      type: 'user_message',
+      content: feedback ? `↩ 驳回：${feedback}` : '↩ 驳回，请重新修改',
+      quoteMessageId: msg.id,
+      round: msg.round,
+      timestamp: new Date().toISOString(),
+    };
+    setChatMessages(prev => [...prev, rejectMsg]);
+
+    try {
+      await rejectTask(msg.taskId, feedback);
+      handleRefresh(msg.projectId);
+    } catch (err) {
+      console.error('Reject failed:', err);
+      setChatMessages(prev => prev.filter(m => m.id !== rejectMsg.id));
+    }
+  }, [handleRefresh]);
+
+  const handleQuoteReply = useCallback((msg: ChatMessage) => {
+    setQuoteTarget(msg);
+  }, []);
+
+  const handleCancelQuote = useCallback(() => {
+    setQuoteTarget(null);
+  }, []);
+
+  const handleChatProjectClick = useCallback((_projectName: string) => {
+    // User clicked a project in sidebar — ChatInput handles @mention independently
+  }, []);
 
   const allTasks = Object.values(tasks).flat();
   const selectedTask = allTasks.find(t => t.id === selectedTaskId) || null;
@@ -266,6 +526,19 @@ export default function App() {
                 }
               }}
             />
+          ) : activeTab === 'chat' ? (
+            <ChatPanel
+              projects={projects}
+              messages={chatMessages}
+              quoteTarget={quoteTarget}
+              onCancelQuote={handleCancelQuote}
+              onSend={handleChatSend}
+              onDecisionClick={handleChatDecision}
+              onApprove={handleChatApprove}
+              onReject={handleChatReject}
+              onQuoteReply={handleQuoteReply}
+              onProjectClick={handleChatProjectClick}
+            />
           ) : (
             <div className="flex-1 min-w-0">
               <ListPanel
@@ -282,7 +555,7 @@ export default function App() {
         </div>
       </div>
 
-      {activeTab !== 'projects' && detailVisible && (
+      {activeTab !== 'projects' && activeTab !== 'chat' && detailVisible && (
         isMobile ? (
           detailPanel
         ) : (
