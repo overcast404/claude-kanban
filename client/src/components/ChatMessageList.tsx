@@ -17,15 +17,18 @@ interface Props {
 export function ChatMessageList({ messages, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const prevLen = useRef(messages.length);
-  const isNewMessage = messages.length > prevLen.current && messages[messages.length - 1]?.id !== messages[prevLen.current - 1]?.id;
-  prevLen.current = messages.length;
+  const mountedRef = useRef(false);
 
   useEffect(() => {
-    if (isNewMessage) {
+    if (!mountedRef.current) {
+      // Initial load — scroll to bottom (newest messages)
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+      mountedRef.current = true;
+    } else {
+      // New message arrived — smooth scroll
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  });
+  }, [messages.length]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
