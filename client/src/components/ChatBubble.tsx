@@ -82,9 +82,11 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
 
   const label = round > 0 ? `${projectName} · 继续执行` : projectName;
 
-  // Get the quoted message text for display
+  // Get the quoted message text — show the last line (actual reply), single line only
   const quotedMsg = message.quoteMessageId ? getQuotedMessage(message.quoteMessageId) : undefined;
-  const quoteText = quotedMsg ? quotedMsg.content.split('\n')[0].slice(0, 50) : '';
+  const quoteText = quotedMsg
+    ? (() => { const lines = quotedMsg.content.split('\n'); const last = lines[lines.length - 1] || lines[0]; return last.slice(0, 40) + (last.length > 40 ? '...' : ''); })()
+    : '';
 
   return (
     <div className="flex justify-start px-3">
