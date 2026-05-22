@@ -7,6 +7,7 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   deciding: '待决策',
   reviewing: '待验收',
   done: '已完成',
+  stopped: '已停止',
 };
 
 export const STATUS_ICON: Record<TaskStatus, IconName> = {
@@ -15,10 +16,11 @@ export const STATUS_ICON: Record<TaskStatus, IconName> = {
   deciding: 'help-circle',
   reviewing: 'check-circle',
   done: 'archive',
+  stopped: 'pause-circle',
 };
 
 export const STATUS_ORDER: TaskStatus[] = [
-  'pending', 'running', 'deciding', 'reviewing', 'done',
+  'pending', 'running', 'deciding', 'reviewing', 'done', 'stopped',
 ];
 
 // Board column definitions
@@ -35,7 +37,7 @@ export const BOARD_COLUMNS = [
     key: 'attention' as const,
     icon: 'bell' as IconName,
     label: '待处理',
-    statuses: ['deciding', 'reviewing'] as TaskStatus[],
+    statuses: ['deciding', 'reviewing', 'stopped'] as TaskStatus[],
     accentBorder: 'border-b-2 border-b-warm-danger',
     accentBg: 'bg-warm-danger',
   },

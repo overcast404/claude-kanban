@@ -10,6 +10,7 @@ interface Props {
   onDelete: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onResumeStopped: () => void;
 }
 
 function Btn({ icon, label, primary, danger, onClick }: { icon: IconName; label: string; primary?: boolean; danger?: boolean; onClick: () => void }) {
@@ -26,7 +27,7 @@ function Btn({ icon, label, primary, danger, onClick }: { icon: IconName; label:
   );
 }
 
-export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete, onApprove, onReject }: Props) {
+export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete, onApprove, onReject, onResumeStopped }: Props) {
   return (
     <div className="flex flex-wrap gap-2">
       {task.status === 'pending' && (
@@ -44,6 +45,19 @@ export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete,
         <>
           <Btn icon="square" label="停止" danger onClick={onStop} />
           <Btn icon="corner-down-left" label="继续" primary onClick={onContinue} />
+        </>
+      )}
+
+      {task.status === 'stopped' && (
+        <>
+          <button onClick={onResumeStopped} className="px-4 py-1.5 bg-warm-brown text-white rounded-lg text-xs font-bold hover:bg-warm-brown-hover transition-colors inline-flex items-center gap-1">
+            <Icon name="corner-down-left" size={14} />
+            回复继续
+          </button>
+          <button onClick={onDelete} className="px-4 py-1.5 border border-warm-danger text-warm-danger rounded-lg text-xs font-semibold hover:bg-warm-danger-bg transition-colors inline-flex items-center gap-1">
+            <Icon name="x" size={14} />
+            删除
+          </button>
         </>
       )}
 

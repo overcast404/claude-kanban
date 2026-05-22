@@ -5,7 +5,7 @@ export const ICON_NAMES = [
   'activity', 'clipboard', 'help-circle', 'check-circle', 'flag',
   'edit', 'play', 'square', 'corner-down-left', 'eye',
   'arrow-left', 'chevron-right', 'plus', 'x', 'message-circle', 'send', 'chevron-down', 'users',
-  'git-branch',
+  'git-branch', 'pause-circle',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -36,6 +36,7 @@ const PATHS: Record<IconName, string> = {
   'chevron-down': 'M6 9l6 6 6-6',
   'users': 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   'git-branch': 'M6 3v12 M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M18 9a9 9 0 0 1-9 9',
+  'pause-circle': 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M10 15V9 M14 15V9',
 };
 
 interface Props extends SVGProps<SVGSVGElement> {
