@@ -23,6 +23,7 @@ interface Props {
   onApprove: () => void;
   onReject: () => void;
   onRejectSubmitted: () => void;
+  onResumeStopped: (message: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -42,6 +43,9 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
   const [showInlineFeedback, setShowInlineFeedback] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showStoppedFeedback, setShowStoppedFeedback] = useState(false);
+  const [stoppedFeedbackText, setStoppedFeedbackText] = useState('');
+  const [stoppedSubmitting, setStoppedSubmitting] = useState(false);
 
   const [decision, setDecision] = useState<Decision | null>(null);
   const [decisionLoading, setDecisionLoading] = useState(false);
@@ -145,6 +149,30 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
     setShowInlineFeedback(false);
     setFeedbackText('');
   };
+
+  const handleResumeStoppedClick = () => {
+    setShowStoppedFeedback(true);
+    setStoppedFeedbackText('');
+  };
+
+  const handleSendStoppedFeedback = async () => {
+    if (!task || !stoppedFeedbackText.trim()) return;
+    setStoppedSubmitting(true);
+    try {
+      await onResumeStopped(stoppedFeedbackText.trim());
+      setShowStoppedFeedback(false);
+      setStoppedFeedbackText('');
+    } catch (e) {
+      alert('操作失败: ' + (e as Error).message);
+    } finally {
+      setStoppedSubmitting(false);
+    }
+  };
+
+  const handleCancelStoppedFeedback = () => {
+    setShowStoppedFeedback(false);
+    setStoppedFeedbackText('');
+  };
   if (!task) {
     if (isMobile) return null;
     return (
@@ -200,7 +228,7 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
         )}
 
         {task.status !== 'deciding' && (
-          <ActionBar task={task} {...actions} onReject={handleRejectClick} />
+          <ActionBar task={task} {...actions} onReject={handleRejectClick} onResumeStopped={handleResumeStoppedClick} />
         )}
 
         {task.status === 'deciding' && decisionLoading && (
@@ -317,6 +345,36 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
                 disabled={submitting || !feedbackText.trim()}
               >
                 发送
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showStoppedFeedback && (
+          <div className="mt-3 p-3 border border-warm-border rounded-lg bg-warm-log-bg">
+            <label className="block text-[10px] font-semibold text-warm-text-secondary uppercase mb-1.5">继续执行的指令</label>
+            <textarea
+              value={stoppedFeedbackText}
+              onChange={e => setStoppedFeedbackText(e.target.value)}
+              placeholder="告诉 Claude 接下来做什么..."
+              rows={3}
+              autoFocus
+              className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text resize-y"
+            />
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                onClick={handleCancelStoppedFeedback}
+                className="px-4 py-1.5 border border-warm-border text-warm-text-secondary rounded-lg text-xs font-semibold"
+                disabled={stoppedSubmitting}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSendStoppedFeedback}
+                className="px-4 py-1.5 bg-warm-brown text-white rounded-lg text-xs font-bold"
+                disabled={stoppedSubmitting || !stoppedFeedbackText.trim()}
+              >
+                发送并继续
               </button>
             </div>
           </div>

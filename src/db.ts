@@ -45,7 +45,7 @@ function initSchema(db: Database.Database): void {
       project_id TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','deciding','reviewing','done')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','deciding','reviewing','done','stopped')),
       session_id TEXT,
       summary TEXT,
       checkpoint_commit TEXT,

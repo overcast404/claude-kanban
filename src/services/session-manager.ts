@@ -118,7 +118,7 @@ export function getRunningCount(): number {
 export function stopSessionManager(taskId: string): void {
   const proc = runningProcesses.get(taskId);
   if (proc) {
-    proc.kill('SIGTERM');
+    proc.kill('SIGINT');
     runningProcesses.delete(taskId);
   }
 }
@@ -301,7 +301,7 @@ async function checkAndHandleCompletion(taskId: string, stdout: string): Promise
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as Task | undefined;
   if (!task) return;
 
-  if (task.status === 'deciding' || task.status === 'reviewing' || task.status === 'done' || task.status === 'pending') return;
+  if (task.status === 'deciding' || task.status === 'reviewing' || task.status === 'done' || task.status === 'pending' || task.status === 'stopped') return;
 
   const summary = extractSummary(stdout);
 

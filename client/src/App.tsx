@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
-import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, fetchChatMessages, saveChatMessage, deleteChatMessages, fetchGitStatuses, rewindTask, forkTask } from './api';
+import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, resumeStoppedTask, fetchChatMessages, saveChatMessage, deleteChatMessages, fetchGitStatuses, rewindTask, forkTask } from './api';
 import { useWebSocket } from './useWebSocket';
 import { type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
@@ -824,6 +824,12 @@ export default function App() {
       onReject={() => {}}
       onRejectSubmitted={() => {
         if (selectedTask) handleRefresh(selectedTask.project_id);
+      }}
+      onResumeStopped={async (message) => {
+        if (selectedTask) {
+          await resumeStoppedTask(selectedTask.id, message);
+          handleRefresh(selectedTask.project_id);
+        }
       }}
       onClose={() => setDetailVisible(false)}
     />

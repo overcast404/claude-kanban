@@ -94,7 +94,7 @@ tasksRouter.post('/', (req: Request, res: Response) => {
 // Update task status manually
 tasksRouter.patch('/:id/status', (req: Request, res: Response) => {
   const { status } = req.body;
-  const validStatuses = ['pending', 'running', 'deciding', 'reviewing', 'done'];
+  const validStatuses = ['pending', 'running', 'deciding', 'reviewing', 'done', 'stopped'];
   if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
   const db = getDb();
@@ -336,7 +336,7 @@ tasksRouter.post('/:id/stop', (req: Request, res: Response) => {
   try {
     stopSessionManager(req.params.id);
     const db = getDb();
-    db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
+    db.prepare(`UPDATE tasks SET status = 'stopped', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
     broadcast({ type: 'task_updated', payload: task });
     res.json(task);
@@ -361,6 +361,31 @@ tasksRouter.post('/:id/continue', async (req: Request, res: Response) => {
     broadcast({ type: 'task_updated', payload: updated });
 
     resumeSession(req.params.id, project.working_dir, '请继续执行任务。').catch(console.error);
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Resume a stopped task with a user message
+tasksRouter.post('/:id/resume', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'message required' });
+
+    const db = getDb();
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!task.session_id) return res.status(400).json({ error: 'Task has no session to resume' });
+
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    db.prepare(`UPDATE tasks SET status = 'running', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
+    const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+    broadcast({ type: 'task_updated', payload: updated });
+
+    resumeSession(req.params.id, project.working_dir, message).catch(console.error);
     res.json(updated);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });

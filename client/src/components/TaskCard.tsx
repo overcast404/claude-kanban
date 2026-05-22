@@ -13,6 +13,7 @@ export function TaskCard({ task, projectName, selected, activity, onClick }: Pro
   const isDeciding = task.status === 'deciding';
   const isReviewing = task.status === 'reviewing';
   const isRunning = task.status === 'running';
+  const isStopped = task.status === 'stopped';
   const hasActivity = isRunning && !!activity;
 
   return (
@@ -22,7 +23,7 @@ export function TaskCard({ task, projectName, selected, activity, onClick }: Pro
         selected
           ? 'border-warm-tan ring-1 ring-warm-tan'
           : 'border-warm-border hover:border-warm-tan'
-      } ${isDone ? 'opacity-60' : ''} ${isDeciding ? 'border-warm-danger border-dashed' : ''} ${isReviewing ? 'border-l-[3px] border-l-warm-tan' : ''}`}
+      } ${isDone ? 'opacity-60' : ''} ${isDeciding ? 'border-warm-danger border-dashed' : ''} ${isReviewing ? 'border-l-[3px] border-l-warm-tan' : ''} ${isStopped ? 'opacity-70 border-dashed' : ''}`}
     >
       <div className={`text-[13px] text-warm-text truncate ${isDone ? 'line-through' : ''}`}>
         {task.description || task.title}
@@ -43,6 +44,9 @@ export function TaskCard({ task, projectName, selected, activity, onClick }: Pro
         )}
         {task.status === 'pending' && task.session_id && (
           <span className="text-warm-tan">可继续</span>
+        )}
+        {task.status === 'stopped' && (
+          <span className="text-warm-text-secondary">已停止</span>
         )}
       </div>
     </div>
