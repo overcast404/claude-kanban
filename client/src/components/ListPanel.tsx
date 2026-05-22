@@ -1,7 +1,7 @@
 import type { Task } from '../../../src/types';
 import { ProjectGroup } from './ProjectGroup';
 import { EmptyState } from './EmptyState';
-import { TABS, type TabKey } from '../status';
+import { BOARD_COLUMNS, TABS, type TabKey } from '../status';
 import { Icon } from './Icon';
 
 interface Props {
@@ -19,7 +19,8 @@ export function ListPanel({
   selectedTaskId, taskActivities, onSelectTask, onCreateTask,
 }: Props) {
   const tab = TABS.find(t => t.key === activeTab);
-  const statuses = tab?.statuses || [];
+  const boardStatuses = BOARD_COLUMNS.flatMap(c => c.statuses);
+  const statuses = tab?.key === 'board' ? boardStatuses : [];
   const icon = tab?.icon || 'folder';
   const label = tab?.label || '';
 
@@ -33,7 +34,7 @@ export function ListPanel({
         <h2 className="text-sm font-bold text-warm-text inline-flex items-center gap-1">
           <Icon name={icon} size={16} /> {label}
         </h2>
-        {activeTab === 'in-progress' && (
+        {activeTab === 'board' && (
           <button
             onClick={onCreateTask}
             className="text-[11px] bg-warm-brown text-white px-3 py-1.5 rounded-lg font-bold hover:bg-warm-brown-hover transition-colors inline-flex items-center gap-1"

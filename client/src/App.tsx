@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
 import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, fetchChatMessages, saveChatMessage } from './api';
 import { useWebSocket } from './useWebSocket';
-import { TABS, type TabKey } from './status';
+import { type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
 import { TopBar } from './components/TopBar';
@@ -55,7 +55,7 @@ function useMediaQuery(query: string) {
 export default function App() {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [activeTab, setActiveTab] = useState<Tab>(() => {
-    try { return (localStorage.getItem('ck_tab') as Tab) || 'action'; } catch { return 'action'; }
+    try { return (localStorage.getItem('ck_tab') as Tab) || 'chat'; } catch { return 'chat'; }
   });
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
@@ -684,15 +684,6 @@ export default function App() {
   const projectNames: Record<string, string> = {};
   projects.forEach(p => { projectNames[p.id] = p.name; });
 
-  // Aggregate counts by tab instead of by status
-  const counts: Record<string, number> = {};
-  allTasks.forEach(t => {
-    const tab = TABS.find(tab => (tab.statuses as readonly string[]).includes(t.status));
-    if (tab) {
-      counts[tab.key] = (counts[tab.key] || 0) + 1;
-    }
-  });
-
   const detailPanel = (
     <DetailPanel
       task={selectedTask}
@@ -757,7 +748,6 @@ export default function App() {
         <div className="flex flex-1 overflow-hidden" style={isMobile ? { paddingBottom: '3.5rem' } : undefined}>
           <Sidebar
             activeTab={activeTab as TabKey}
-            counts={counts}
             onSelectTab={setActiveTab as (tab: TabKey) => void}
           />
 
@@ -832,7 +822,6 @@ export default function App() {
 
       <BottomNav
         activeTab={activeTab as TabKey}
-        counts={counts}
         onSelectTab={setActiveTab as (tab: TabKey) => void}
       />
 
