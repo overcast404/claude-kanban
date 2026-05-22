@@ -28,7 +28,7 @@ function QuoteReplyButton({ side, onClick }: { side: 'left' | 'right'; onClick: 
 function QuoteRef({ text, onClick }: { text: string; onClick?: () => void }) {
   return (
     <div
-      className={`text-[10px] text-warm-text-secondary mb-1.5 border-l-2 border-warm-border pl-2 truncate max-w-[180px] ${onClick ? 'cursor-pointer hover:text-warm-brown hover:border-warm-brown transition-colors' : ''}`}
+      className={`text-[10px] text-warm-text-secondary mb-1.5 border-l-2 border-warm-border pl-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-[180px] ${onClick ? 'cursor-pointer hover:text-warm-brown hover:border-warm-brown transition-colors' : ''}`}
       onClick={onClick}
       title={onClick ? '点击查看完整对话' : undefined}
     >
@@ -86,10 +86,10 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
 
   const label = round > 0 ? `${projectName} · 继续执行` : projectName;
 
-  // Get the quoted message text — show the last line (actual reply), single line only
+  // Get the quoted message text — strip newlines, single line only
   const quotedMsg = message.quoteMessageId ? getQuotedMessage(message.quoteMessageId) : undefined;
   const quoteText = quotedMsg
-    ? (() => { const lines = quotedMsg.content.split('\n'); const last = lines[lines.length - 1] || lines[0]; return last.slice(0, 20) + (last.length > 20 ? '...' : ''); })()
+    ? (() => { const clean = quotedMsg.content.replace(/[\n\r]+/g, ' ').trim(); return clean.slice(0, 20) + (clean.length > 20 ? '...' : ''); })()
     : '';
 
   return (
