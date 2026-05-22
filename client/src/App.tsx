@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
-import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, fetchChatMessages, saveChatMessage } from './api';
+import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, fetchChatMessages, saveChatMessage, deleteChatMessages, fetchGitStatuses } from './api';
 import { useWebSocket } from './useWebSocket';
 import { type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
@@ -96,6 +96,16 @@ export default function App() {
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
 
+  const doneTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const taskList of Object.values(tasks)) {
+      for (const t of taskList) {
+        if (t.status === 'done') ids.add(t.id);
+      }
+    }
+    return ids;
+  }, [tasks]);
+
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -107,7 +117,7 @@ export default function App() {
   const taskRounds = useRef<Record<string, number>>({});
   const taskLastUserMsg = useRef<Record<string, string>>({});
 
-  const [detailVisible, setDetailVisible] = useState(true);
+  const [detailVisible, setDetailVisible] = useState(false);
   const [detailWidth, setDetailWidth] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef(false);
@@ -124,9 +134,26 @@ export default function App() {
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
+  // Fetch git statuses on mount and periodically
+  useEffect(() => {
+    fetchGitStatuses().then(setGitStatuses).catch(() => {});
+    const interval = setInterval(() => {
+      fetchGitStatuses().then(setGitStatuses).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Persist active tab across refreshes
   useEffect(() => {
     try { localStorage.setItem('ck_tab', activeTab); } catch {}
+  }, [activeTab]);
+
+  // Close detail panel when entering board tab
+  useEffect(() => {
+    if (activeTab === 'board') {
+      setSelectedTaskId(null);
+      setDetailVisible(false);
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -156,16 +183,14 @@ export default function App() {
 
   useEffect(() => {
     fetchChatMessages(PAGE_SIZE, 0).then(rows => {
-      // Filter out ephemeral execution bubbles
-      const filtered = rows.filter(r => r.type !== 'ai_execution');
-      if (filtered.length > 0) {
-        const msgs = parseChatRows(filtered).reverse();
+      if (rows.length > 0) {
+        const msgs = parseChatRows(rows).reverse();
         for (const m of msgs) {
           if (m.type === 'user_message' && m.taskId) taskLastUserMsg.current[m.taskId] = m.id;
         }
         setChatMessages(msgs);
         setHasMore(rows.length >= PAGE_SIZE);
-        loadedOffset.current = filtered.length;
+        loadedOffset.current = rows.length;
       }
     }).catch(() => {});
   }, [parseChatRows]);
@@ -175,9 +200,8 @@ export default function App() {
     setLoadingMore(true);
     try {
       const rows = await fetchChatMessages(PAGE_SIZE, loadedOffset.current);
-      const filtered = rows.filter(r => r.type !== 'ai_execution');
-      if (filtered.length > 0) {
-        const olderMsgs = parseChatRows(filtered).reverse();
+      if (rows.length > 0) {
+        const olderMsgs = parseChatRows(rows).reverse();
         for (const m of olderMsgs) {
           if (m.type === 'user_message' && m.taskId && !taskLastUserMsg.current[m.taskId]) {
             taskLastUserMsg.current[m.taskId] = m.id;
@@ -199,7 +223,10 @@ export default function App() {
   useEffect(() => {
     const prev = prevMsgSnap.current;
     for (const msg of chatMessages) {
-      if (msg.type === 'ai_execution') continue; // ephemeral, never persist
+      if (msg.type === 'ai_execution') {
+        // Persist execution bubbles so they survive refresh;
+        // they'll be removed from chat when task enters deciding/reviewing/done
+      }
       const decJson = msg.decision ? JSON.stringify(msg.decision) : '';
       if (!prev.ids.has(msg.id)) {
         // New message — save immediately
@@ -308,32 +335,30 @@ export default function App() {
       }
 
       if (task.status === 'deciding') {
-        // Create new ai_decision bubble, remove latest ai_execution
+        // Clean up ai_execution but let decision_created create the ai_decision bubble
+        deleteChatMessages(task.id, 'ai_execution');
         setChatMessages(prev => {
-          for (let i = prev.length - 1; i >= 0; i--) {
-            if (prev[i].taskId === task.id && prev[i].type === 'ai_decision' && !prev[i].decision) {
-              return prev; // unresolved bubble already waiting
+          for (const m of prev) {
+            if (m.taskId === task.id && m.type === 'ai_execution') {
+              const timer = streamSaveTimers.current[m.id];
+              if (timer) { clearTimeout(timer); delete streamSaveTimers.current[m.id]; }
             }
           }
-          // Remove ALL ai_execution bubbles for this task
-          const filtered = prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
-          return [...filtered, {
-            id: chatMsgId(),
-            taskId: task.id,
-            projectId: task.project_id,
-            projectName: pName,
-            type: 'ai_decision',
-            content: '',
-            quoteMessageId: taskLastUserMsg.current[task.id],
-            round: taskRounds.current[task.id] || 0,
-            timestamp: new Date().toISOString(),
-          }];
+          return prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
         });
       }
 
       if (task.status === 'reviewing') {
         // Create new ai_review bubble, remove ALL ai_execution for this task
+        deleteChatMessages(task.id, 'ai_execution');
         setChatMessages(prev => {
+          // Clear pending debounced saves for removed execution bubbles
+          for (const m of prev) {
+            if (m.taskId === task.id && m.type === 'ai_execution') {
+              const timer = streamSaveTimers.current[m.id];
+              if (timer) { clearTimeout(timer); delete streamSaveTimers.current[m.id]; }
+            }
+          }
           const filtered = prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
           return [...filtered, {
             id: chatMsgId(),
@@ -380,7 +405,23 @@ export default function App() {
       lastTaskStatus.current[task.id] = 'deciding';
       const proj = projectsRef.current.find(p => p.id === task.project_id);
       const pName = proj?.name || task.project_id;
+      deleteChatMessages(task.id, 'ai_execution');
       setChatMessages(prev => {
+        // Capture execution context before removing bubbles
+        let execContext = '';
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].taskId === task.id && prev[i].type === 'ai_execution' && prev[i].content) {
+            execContext = prev[i].content;
+            break;
+          }
+        }
+        // Clear pending debounced saves for removed execution bubbles
+        for (const m of prev) {
+          if (m.taskId === task.id && m.type === 'ai_execution') {
+            const timer = streamSaveTimers.current[m.id];
+            if (timer) { clearTimeout(timer); delete streamSaveTimers.current[m.id]; }
+          }
+        }
         // Remove ALL ai_execution bubbles for this task
         const filtered = prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
         // Find the latest unresolved ai_decision and populate it
@@ -394,13 +435,16 @@ export default function App() {
             break;
           }
         }
+        const content = execContext
+          ? execContext + '\n\n---\n\n' + decision.question
+          : decision.question;
         return [...filtered, {
           id: chatMsgId(),
           taskId: task.id,
           projectId: task.project_id,
           projectName: pName,
           type: 'ai_decision',
-          content: decision.question,
+          content,
           decision,
           quoteMessageId: taskLastUserMsg.current[task.id],
           round: taskRounds.current[task.id] || 0,
@@ -665,6 +709,7 @@ export default function App() {
     setQuoteTarget(null);
   }, []);
 
+  const [gitStatuses, setGitStatuses] = useState<Record<string, { changedFiles: number }>>({});
   const [mentionPrefill, setMentionPrefill] = useState<{ name: string; n: number } | null>(null);
 
   const handleChatProjectClick = useCallback((projectName: string) => {
@@ -769,6 +814,7 @@ export default function App() {
               <ChatPanel
                 projects={projects}
                 messages={chatMessages}
+                doneTaskIds={doneTaskIds}
                 quoteTarget={quoteTarget}
                 onCancelQuote={handleCancelQuote}
                 onSend={handleChatSend}
@@ -779,6 +825,7 @@ export default function App() {
                 onThreadOpen={handleThreadOpen}
                 onProjectClick={handleChatProjectClick}
                 mentionPrefill={mentionPrefill}
+                gitStatuses={gitStatuses}
                 hasMore={hasMore}
                 loadingMore={loadingMore}
                 onLoadMore={loadMoreMessages}

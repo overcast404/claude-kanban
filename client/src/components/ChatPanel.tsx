@@ -15,6 +15,7 @@ interface ProjectWithCounts extends Project {
 interface Props {
   projects: ProjectWithCounts[];
   messages: ChatMessage[];
+  doneTaskIds: Set<string>;
   quoteTarget: ChatMessage | null;
   onCancelQuote: () => void;
   onSend: (text: string, quoteMessageId?: string) => void;
@@ -25,6 +26,7 @@ interface Props {
   onThreadOpen: (taskId: string) => void;
   onProjectClick: (projectName: string) => void;
   mentionPrefill: { name: string; n: number } | null;
+  gitStatuses: Record<string, { changedFiles: number }>;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -36,10 +38,12 @@ export function ChatPanel(props: Props) {
       <ChatSidebar
         projects={props.projects}
         onProjectClick={props.onProjectClick}
+        gitStatuses={props.gitStatuses}
       />
       <div className="flex-1 flex flex-col min-w-0">
         <ChatMessageList
           messages={props.messages}
+          doneTaskIds={props.doneTaskIds}
           hasMore={props.hasMore}
           loadingMore={props.loadingMore}
           onLoadMore={props.onLoadMore}

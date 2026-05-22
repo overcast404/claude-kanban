@@ -336,7 +336,7 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
           >
             <Icon name="arrow-left" size={16} /> 返回
           </button>
-          <h3 className="text-sm font-bold text-warm-text truncate inline-flex items-center gap-1"><Icon name="clipboard" size={14} /> 日志 — {task.title}</h3>
+          <h3 className="text-sm font-bold text-warm-text inline-flex items-center gap-1"><Icon name="clipboard" size={14} /> 日志</h3>
         </div>
         <label className="flex items-center gap-1.5 text-[11px] text-warm-text-secondary cursor-pointer shrink-0">
           <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} />

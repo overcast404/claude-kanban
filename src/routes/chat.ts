@@ -72,9 +72,14 @@ chatRouter.post('/', (req: Request, res: Response) => {
   res.status(201).json({ ok: true });
 });
 
-// DELETE /api/chat-messages/:taskId — delete all messages for a task
+// DELETE /api/chat-messages/:taskId — delete messages for a task, optionally filtered by type
 chatRouter.delete('/:taskId', (req: Request, res: Response) => {
   const db = getDb();
-  db.prepare('DELETE FROM chat_messages WHERE task_id = ?').run(req.params.taskId);
+  const type = req.query.type as string | undefined;
+  if (type) {
+    db.prepare('DELETE FROM chat_messages WHERE task_id = ? AND type = ?').run(req.params.taskId, type);
+  } else {
+    db.prepare('DELETE FROM chat_messages WHERE task_id = ?').run(req.params.taskId);
+  }
   res.status(204).send();
 });

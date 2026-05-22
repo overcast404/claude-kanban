@@ -19,6 +19,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export const listProjects = () => request<Project[]>('/projects');
 export const createProject = (input: ProjectCreateInput) =>
   request<Project>('/projects', { method: 'POST', body: JSON.stringify(input) });
+export const deleteProject = (projectId: string) =>
+  request<void>(`/projects/${projectId}`, { method: 'DELETE' });
+export const fetchGitStatuses = () =>
+  request<Record<string, { changedFiles: number }>>('/projects/git-status');
 
 // Tasks
 export const listTasks = (projectId: string) =>
@@ -53,9 +57,6 @@ export const updateTask = (taskId: string, data: { title?: string; description?:
   request<Task>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(data) });
 export const deleteTask = (taskId: string) =>
   request<void>(`/tasks/${taskId}`, { method: 'DELETE' });
-export const deleteProject = (projectId: string) =>
-  request<void>(`/projects/${projectId}`, { method: 'DELETE' });
-
 // Filesystem — 服务端调用系统原生目录选择器 (osascript/PowerShell/zenity)
 export const pickDirectory = (): Promise<{ path?: string; cancelled?: boolean; error?: string }> =>
   request('/filesystem/pick-directory', { method: 'POST' });
@@ -93,3 +94,5 @@ export const fetchChatMessages = (limit = 20, offset = 0) =>
   request<ChatMessageRow[]>(`/chat-messages?limit=${limit}&offset=${offset}`);
 export const saveChatMessage = (msg: ChatMessageRow) =>
   request<{ ok: boolean }>('/chat-messages', { method: 'POST', body: JSON.stringify(msg) });
+export const deleteChatMessages = (taskId: string, type?: string) =>
+  request<void>(`/chat-messages/${encodeURIComponent(taskId)}${type ? `?type=${encodeURIComponent(type)}` : ''}`, { method: 'DELETE' });

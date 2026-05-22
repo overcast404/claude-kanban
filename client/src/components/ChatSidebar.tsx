@@ -11,9 +11,10 @@ interface ProjectWithCounts extends Project {
 interface Props {
   projects: ProjectWithCounts[];
   onProjectClick: (projectName: string) => void;
+  gitStatuses: Record<string, { changedFiles: number }>;
 }
 
-export function ChatSidebar({ projects, onProjectClick }: Props) {
+export function ChatSidebar({ projects, onProjectClick, gitStatuses }: Props) {
   return (
     <div className="w-[170px] shrink-0 bg-warm-card border-r border-warm-border flex flex-col max-md:hidden">
       <div className="px-3 py-3 font-semibold text-[12px] text-warm-brown flex items-center gap-1.5">
@@ -24,6 +25,7 @@ export function ChatSidebar({ projects, onProjectClick }: Props) {
         {projects.map(p => {
           const activeCount = p.count_running + p.count_deciding + p.count_reviewing;
           const hasActive = activeCount > 0;
+          const gitStatus = gitStatuses[p.id];
           return (
             <button
               key={p.id}
@@ -40,6 +42,12 @@ export function ChatSidebar({ projects, onProjectClick }: Props) {
                 }`}
               />
               <span className="truncate flex-1">{p.name}</span>
+              {gitStatus && gitStatus.changedFiles > 0 && (
+                <span className="flex items-center gap-0.5 text-[10px] text-amber-600 shrink-0">
+                  <Icon name="git-branch" size={11} />
+                  {gitStatus.changedFiles}
+                </span>
+              )}
               {activeCount > 0 && (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${
                   hasActive ? 'bg-warm-brown/20 text-warm-brown' : 'bg-gray-100 text-gray-400'

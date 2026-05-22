@@ -41,6 +41,13 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
     }
   }, [mentionPrefill]);
 
+  // Auto-focus when quote reply is initiated
+  useEffect(() => {
+    if (quoteTarget) {
+      inputRef.current?.focus();
+    }
+  }, [quoteTarget]);
+
   // Auto-resize textarea
   useEffect(() => {
     const el = inputRef.current;

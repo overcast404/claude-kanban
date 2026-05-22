@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { execFile } from 'child_process';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import { stopSessionManager } from '../services/session-manager';
@@ -41,6 +42,26 @@ projectsRouter.post('/', (req: Request, res: Response) => {
   }
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
   res.status(201).json(project);
+});
+
+// Get git status for all projects (uncommitted file counts)
+projectsRouter.get('/git-status', (_req: Request, res: Response) => {
+  const db = getDb();
+  const projects = db.prepare('SELECT id, working_dir FROM projects').all() as { id: string; working_dir: string }[];
+
+  const results: Record<string, { changedFiles: number }> = {};
+
+  const promises = projects.map(p => new Promise<void>((resolve) => {
+    execFile('git', ['-C', p.working_dir, 'status', '--porcelain'], { timeout: 10000 }, (error, stdout) => {
+      if (!error) {
+        const count = stdout.trim().split('\n').filter(l => l.length > 0).length;
+        if (count > 0) results[p.id] = { changedFiles: count };
+      }
+      resolve();
+    });
+  }));
+
+  Promise.all(promises).then(() => res.json(results));
 });
 
 // Get single project

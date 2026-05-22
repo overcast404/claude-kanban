@@ -26,7 +26,7 @@ src/                    # 服务端 (Express + WebSocket + SQLite)
   broadcast.ts          # WebSocket 广播
   routes/               # API 路由 (projects, tasks, hooks, mcp, filesystem)
   services/
-    session-manager.ts  # spawn claude CLI 子进程，max 3 并发，排队 + 自动恢复
+    session-manager.ts  # spawn claude CLI 子进程，无上限并发，自动恢复
 
 client/                 # React 18 + Vite 5 + Tailwind 4
   src/                  # 前端源码
@@ -42,7 +42,7 @@ pending → running → deciding（Claude 提问）→ running（用户决策后
 
 ### 会话编排 (session-manager.ts)
 
-- spawn claude CLI 子进程，max 3 并发
+- spawn claude CLI 子进程，无并发上限
 - 每个会话动态生成三份配置到 dataDir: `hooks/<taskId>.json`（钩子配置）、`-protocol.md`（协议约束）、`-mcp.json`（MCP 连接）
 - 协议约束：Claude 停止时必须通过 AskUserQuestion（需决策）或 mark_complete（已完成）发信号
 - 进程无信号退出时自动恢复并提示意图

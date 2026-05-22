@@ -6,6 +6,7 @@ import MarkdownContent from './MarkdownContent';
 interface Props {
   message: ChatMessage;
   getQuotedMessage: (id: string) => ChatMessage | undefined;
+  isTaskDone: boolean;
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
@@ -37,7 +38,7 @@ function QuoteRef({ text, onClick }: { text: string; onClick?: () => void }) {
   );
 }
 
-export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
+export function ChatBubble({ message, getQuotedMessage, isTaskDone, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
   const { type, projectName, content, round } = message;
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState('');
@@ -210,18 +211,27 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
           <>
             <div className="mb-2"><MarkdownContent>{content}</MarkdownContent></div>
             <div className="flex gap-2">
-              <button
-                onClick={() => onApprove(message)}
-                className="px-4 py-1.5 bg-warm-brown text-white rounded-md text-[11px] hover:bg-warm-brown/90 transition-colors"
-              >
-                完成
-              </button>
-              <button
-                onClick={() => onQuoteReply(message)}
-                className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
-              >
-                💬 回复
-              </button>
+              {isTaskDone ? (
+                <span className="px-4 py-1.5 bg-gray-200 text-warm-text-secondary rounded-md text-[11px] inline-flex items-center gap-1 cursor-default">
+                  <Icon name="check-circle" size={12} />
+                  已完成
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onApprove(message)}
+                    className="px-4 py-1.5 bg-warm-brown text-white rounded-md text-[11px] hover:bg-warm-brown/90 transition-colors"
+                  >
+                    完成
+                  </button>
+                  <button
+                    onClick={() => onQuoteReply(message)}
+                    className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
+                  >
+                    💬 回复
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

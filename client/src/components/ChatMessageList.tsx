@@ -4,6 +4,7 @@ import { ChatBubble } from './ChatBubble';
 
 interface Props {
   messages: ChatMessage[];
+  doneTaskIds: Set<string>;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -14,7 +15,7 @@ interface Props {
   onThreadOpen: (taskId: string) => void;
 }
 
-export function ChatMessageList({ messages, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
+export function ChatMessageList({ messages, doneTaskIds, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
@@ -64,6 +65,7 @@ export function ChatMessageList({ messages, hasMore, loadingMore, onLoadMore, on
           key={msg.id}
           message={msg}
           getQuotedMessage={getQuotedMessage}
+          isTaskDone={doneTaskIds.has(msg.taskId)}
           onDecisionClick={onDecisionClick}
           onApprove={onApprove}
           onReject={onReject}
