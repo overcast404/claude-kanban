@@ -10,15 +10,17 @@ interface Props {
 }
 
 export function EditTaskModal({ task, onClose, onUpdated }: Props) {
-  const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSave = async () => {
-    if (!title.trim()) return;
+    if (!description.trim()) return;
     setSubmitting(true);
     try {
-      await updateTask(task.id, { title: title.trim(), description: description.trim() });
+      await updateTask(task.id, {
+        title: description.trim().slice(0, 80),
+        description: description.trim(),
+      });
       onUpdated();
     } catch (e) {
       alert('保存失败: ' + (e as Error).message);
@@ -31,21 +33,13 @@ export function EditTaskModal({ task, onClose, onUpdated }: Props) {
     <Modal title="编辑任务" onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">标题</label>
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text"
-            autoFocus
-          />
-        </div>
-        <div>
           <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">描述</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
             className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text resize-y"
             rows={4}
+            autoFocus
           />
         </div>
         <div className="flex justify-end gap-2 pt-3">
@@ -58,7 +52,7 @@ export function EditTaskModal({ task, onClose, onUpdated }: Props) {
           <button
             onClick={handleSave}
             className="px-4 py-2 bg-warm-brown text-white rounded-lg text-xs font-bold"
-            disabled={submitting || !title.trim()}
+            disabled={submitting || !description.trim()}
           >
             保存
           </button>

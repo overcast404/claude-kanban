@@ -10,16 +10,15 @@ interface Props {
 
 export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
-  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleCreate = async (start: boolean) => {
-    if (!title.trim() || !projectId) return;
+    if (!description.trim() || !projectId) return;
     setSubmitting(true);
     try {
       const task = await createTask(projectId, {
-        title: title.trim(),
+        title: description.trim().slice(0, 80),
         description: description.trim(),
       });
       if (start) await startTask(task.id);
@@ -47,23 +46,14 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
           </select>
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">标题</label>
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text"
-            placeholder="任务标题"
-            autoFocus
-          />
-        </div>
-        <div>
           <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">描述</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
             className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text resize-y"
-            placeholder="任务描述（可选）"
+            placeholder="任务描述"
             rows={3}
+            autoFocus
           />
         </div>
         <div className="flex justify-end gap-2 pt-3">
@@ -77,14 +67,14 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
           <button
             onClick={() => handleCreate(false)}
             className="px-4 py-2 border border-warm-tan text-warm-brown rounded-lg text-xs font-semibold"
-            disabled={submitting || !title.trim()}
+            disabled={submitting || !description.trim()}
           >
             创建为待启动
           </button>
           <button
             onClick={() => handleCreate(true)}
             className="px-4 py-2 bg-warm-brown text-white rounded-lg text-xs font-bold"
-            disabled={submitting || !title.trim()}
+            disabled={submitting || !description.trim()}
           >
             创建并启动
           </button>

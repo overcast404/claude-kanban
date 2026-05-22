@@ -24,8 +24,8 @@ export function TaskCard({ task, projectName, selected, activity, onClick }: Pro
           : 'border-warm-border hover:border-warm-tan'
       } ${isDone ? 'opacity-60' : ''} ${isDeciding ? 'border-warm-danger border-dashed' : ''} ${isReviewing ? 'border-l-[3px] border-l-warm-tan' : ''}`}
     >
-      <div className={`text-[13px] font-bold text-warm-text mb-1 ${isDone ? 'line-through' : ''}`}>
-        {task.title}
+      <div className={`text-[13px] text-warm-text truncate ${isDone ? 'line-through' : ''}`}>
+        {task.description || task.title}
       </div>
 
       {hasActivity && (
