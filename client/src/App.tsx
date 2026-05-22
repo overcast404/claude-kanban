@@ -891,7 +891,7 @@ export default function App() {
               {threadTaskId && <ThreadPanel taskId={threadTaskId} taskTitle={threadTitle} messages={chatMessages} onClose={handleThreadClose} />}
             </>
           ) : (
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               <KanbanBoard
                 tasksByProject={tasksByProject}
                 projectNames={projectNames}
