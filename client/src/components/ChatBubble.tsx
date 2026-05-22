@@ -80,7 +80,7 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
     borderStyle = 'border-warm-brown';
     statusBadge = '需决策';
   } else if (isReview) {
-    borderStyle = 'border-emerald-300';
+    borderStyle = 'border-amber-300';
     statusBadge = null;
   }
 
@@ -207,7 +207,7 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
             <div className="flex gap-2">
               <button
                 onClick={() => onApprove(message)}
-                className="px-4 py-1.5 bg-emerald-500 text-white rounded-md text-[11px] hover:bg-emerald-600 transition-colors"
+                className="px-4 py-1.5 bg-amber-500 text-white rounded-md text-[11px] hover:bg-amber-600 transition-colors"
               >
                 ✅ 批准完成
               </button>
