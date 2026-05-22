@@ -16,7 +16,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
   const [showMention, setShowMention] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const filteredProjects = projects.filter(p =>
     p.name.toLowerCase().includes(mentionFilter.toLowerCase())
@@ -40,6 +40,15 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
       inputRef.current?.focus();
     }
   }, [mentionPrefill]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+  }, [text]);
 
   const insertMention = (projectName: string) => {
     const newText = text.replace(/@\S*$/, `@${projectName} `);
@@ -81,10 +90,12 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
       return;
     }
 
-    if (e.key === 'Enter' && !e.shiftKey && text.trim()) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSend(text.trim(), quoteTarget?.id);
-      setText('');
+      if (text.trim()) {
+        onSend(text.trim(), quoteTarget?.id);
+        setText('');
+      }
     }
   };
 
@@ -133,17 +144,17 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
 
       {/* Input row */}
       <div className="flex items-center gap-2">
-        <input
+        <textarea
           ref={inputRef}
-          type="text"
           value={text}
+          rows={1}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           onCompositionStart={() => { isComposing.current = true; }}
           onCompositionEnd={() => { isComposing.current = false; }}
           onBlur={() => setTimeout(() => setShowMention(false), 150)}
-          placeholder="@项目名 描述你要做的事情..."
-          className="flex-1 px-3 py-2 border border-warm-border rounded-lg text-[13px] outline-none focus:border-warm-brown transition-colors placeholder:text-gray-300"
+          placeholder="@成员名 描述你要做的事情..."
+          className="flex-1 px-3 py-2 border border-warm-border rounded-lg text-[13px] outline-none focus:border-warm-brown transition-colors placeholder:text-gray-300 resize-none overflow-hidden"
         />
         <button
           onClick={handleSendClick}
@@ -155,7 +166,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
       </div>
 
       <div className="text-[10px] text-warm-text-secondary mt-1.5 px-1">
-        💡 @项目名 创建新任务 | 右键/悬停消息引用回复 | 直接点击 AI 消息中的按钮做决策
+        💡 @成员名 创建新任务 | Shift+Enter 换行 | 右键/悬停消息引用回复 | 点击 AI 消息按钮决策
       </div>
     </div>
   );

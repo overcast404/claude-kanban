@@ -758,7 +758,7 @@ export default function App() {
               projects={projects}
               onCreate={() => setShowCreateProject(true)}
               onDelete={async (p) => {
-                if (confirm(`确定删除项目 "${p.name}" 及其所有任务？`)) {
+                if (confirm(`确定删除成员 "${p.name}" 及其所有任务？`)) {
                   await deleteProject(p.id);
                   handleRefresh();
                 }

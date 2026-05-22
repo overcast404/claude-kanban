@@ -26,7 +26,7 @@ export function TopBar({ activeTab, onSelectTab }: Props) {
                 : 'text-warm-text-secondary hover:text-warm-brown'
             }`}
           >
-            <Icon name="folder" size={15} /> <span className="max-md:hidden">项目</span>
+            <Icon name="users" size={15} /> <span className="max-md:hidden">管理</span>
           </button>
           <button
             onClick={() => setShowQr(true)}

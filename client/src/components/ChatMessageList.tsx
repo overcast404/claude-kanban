@@ -47,7 +47,7 @@ export function ChatMessageList({ messages, hasMore, loadingMore, onLoadMore, on
           <div className="text-3xl mb-3">💬</div>
           <div className="text-[13px] font-medium mb-1">欢迎来到群聊</div>
           <div className="text-[11px]">
-            输入 <code className="bg-gray-100 px-1 rounded">@项目名 任务描述</code> 开始
+            输入 <code className="bg-gray-100 px-1 rounded">@成员名 任务描述</code> 开始
           </div>
         </div>
       </div>

@@ -24,18 +24,18 @@ export function ProjectView({ projects, onCreate, onDelete }: Props) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-warm-border flex-shrink-0">
-        <h2 className="text-sm font-bold text-warm-text inline-flex items-center gap-1"><Icon name="folder" size={16} /> 项目</h2>
+        <h2 className="text-sm font-bold text-warm-text inline-flex items-center gap-1"><Icon name="users" size={16} /> 管理成员</h2>
         <button
           onClick={onCreate}
           className="text-[11px] bg-warm-brown text-white px-3 py-1.5 rounded-lg font-bold hover:bg-warm-brown-hover transition-colors"
         >
-          + 新建
+          + 添加成员
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {projects.length === 0 ? (
-          <EmptyState icon="folder" message="还没有项目，点击上方按钮创建" />
+          <EmptyState icon="users" message="还没有成员，点击上方按钮添加" />
         ) : (
           <div className="flex flex-col gap-2.5">
             {projects.map(p => (

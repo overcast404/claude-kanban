@@ -34,7 +34,7 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
     <Modal title="+ 新建任务" onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">项目</label>
+          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">成员</label>
           <select
             value={projectId}
             onChange={e => setProjectId(e.target.value)}

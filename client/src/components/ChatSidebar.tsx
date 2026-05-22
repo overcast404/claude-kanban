@@ -52,7 +52,7 @@ export function ChatSidebar({ projects, onProjectClick }: Props) {
         })}
       </div>
       <div className="px-3 py-2 text-[10px] text-warm-text-secondary text-center border-t border-warm-border">
-        💡 @项目名 即可创建新任务
+        💡 @成员名 即可创建新任务
       </div>
     </div>
   );

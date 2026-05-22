@@ -39,20 +39,20 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
   };
 
   return (
-    <Modal title="+ 新建项目" onClose={onClose}>
+    <Modal title="添加成员" onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">项目名称</label>
+          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">成员名称</label>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
             className="w-full p-2 border border-warm-border rounded-lg text-sm bg-warm-card text-warm-text"
-            placeholder="输入项目名称"
+            placeholder="输入成员名称"
             autoFocus
           />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">工作目录</label>
+          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">项目</label>
           <div className="flex gap-2">
             <input
               value={workingDir}
@@ -81,7 +81,7 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
             className="px-4 py-2 bg-warm-brown text-white rounded-lg text-xs font-bold"
             disabled={submitting || !name.trim() || !workingDir.trim()}
           >
-            创建
+            添加
           </button>
         </div>
       </div>

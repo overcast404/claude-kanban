@@ -11,18 +11,18 @@ filesystemRouter.post('/pick-directory', (_req: Request, res: Response) => {
 
   if (platform === 'darwin') {
     cmd = 'osascript';
-    args = ['-e', 'POSIX path of (choose folder with prompt "选择工作目录")'];
+    args = ['-e', 'POSIX path of (choose folder with prompt "选择项目")'];
   } else if (platform === 'win32') {
     cmd = 'powershell';
     args = [
       '-NoProfile',
       '-STA',
       '-Command',
-      "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '选择工作目录'; if ($f.ShowDialog() -eq 'OK') { $f.SelectedPath }",
+      "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '选择项目'; if ($f.ShowDialog() -eq 'OK') { $f.SelectedPath }",
     ];
   } else {
     cmd = 'zenity';
-    args = ['--file-selection', '--directory', '--title=选择工作目录'];
+    args = ['--file-selection', '--directory', '--title=选择项目'];
   }
 
   execFile(cmd, args, { timeout: 60000 }, (err, stdout, stderr) => {

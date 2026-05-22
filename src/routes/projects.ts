@@ -34,7 +34,7 @@ projectsRouter.post('/', (req: Request, res: Response) => {
     db.prepare('INSERT INTO projects (id, name, working_dir) VALUES (?, ?, ?)').run(id, name, working_dir);
   } catch (e: any) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return res.status(400).json({ error: '该工作目录已被其他项目使用' });
+      return res.status(400).json({ error: '该项目已被其他成员使用' });
     }
     console.error(`[projects] create failed: ${e.message}`);
     return res.status(500).json({ error: e.message });
