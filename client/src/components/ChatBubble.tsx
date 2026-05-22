@@ -207,9 +207,9 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
             <div className="flex gap-2">
               <button
                 onClick={() => onApprove(message)}
-                className="px-4 py-1.5 bg-amber-500 text-white rounded-md text-[11px] hover:bg-amber-600 transition-colors"
+                className="px-4 py-1.5 bg-warm-brown text-white rounded-md text-[11px] hover:bg-warm-brown/90 transition-colors"
               >
-                ✅ 批准完成
+                完成
               </button>
               <button
                 onClick={() => onQuoteReply(message)}
