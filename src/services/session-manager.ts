@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -8,6 +8,7 @@ import { broadcast } from '../broadcast';
 import type { Task, Project } from '../types';
 
 const MANAGER_PORT = parseInt(process.env.PORT || '14567', 10);
+const WORKTREE_PREFIX = 'kanban-';
 
 const runningProcesses = new Map<string, ChildProcess>();
 
@@ -21,6 +22,93 @@ async function checkClaudeAvailable(): Promise<boolean> {
     proc.on('close', (code) => resolve(code === 0));
     proc.on('error', () => resolve(false));
   });
+}
+
+function getWorktreeName(taskId: string): string {
+  return `${WORKTREE_PREFIX}${taskId}`;
+}
+
+function isGitRepo(dir: string): boolean {
+  try {
+    execSync(`git -C "${dir}" rev-parse --git-dir`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findWorktreeByTask(workingDir: string, taskId: string): { path: string; branch: string } | null {
+  try {
+    const output = execSync(`git -C "${workingDir}" worktree list --porcelain`, { stdio: 'pipe' }).toString();
+    const blocks = output.split('\n\n');
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+      let wtPath = '';
+      let branch = '';
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) wtPath = line.slice('worktree '.length);
+        if (line.startsWith('branch ')) branch = line.slice('branch '.length).replace('refs/heads/', '');
+      }
+      if (matchesTask(wtPath, taskId) || matchesTask(branch, taskId)) {
+        return { path: wtPath, branch };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function matchesTask(text: string, taskId: string): boolean {
+  const idx = text.lastIndexOf(WORKTREE_PREFIX);
+  if (idx === -1) return false;
+  const suffix = text.slice(idx + WORKTREE_PREFIX.length);
+  return taskId.startsWith(suffix) || suffix.startsWith(taskId);
+}
+
+export function cleanupWorktree(workingDir: string, taskId: string, keepBranch = false): void {
+  try {
+    const entry = findWorktreeByTask(workingDir, taskId);
+    if (entry) {
+      execSync(`git -C "${workingDir}" worktree remove "${entry.path}" --force`, { stdio: 'pipe' });
+      if (!keepBranch) {
+        execSync(`git -C "${workingDir}" branch -D "${entry.branch}"`, { stdio: 'pipe' });
+      }
+    }
+  } catch (e) {
+    console.error(`[SessionManager] Failed to cleanup worktree for task ${taskId}:`, (e as Error).message);
+  }
+}
+
+function findBranchByTask(workingDir: string, taskId: string): string | null {
+  try {
+    const output = execSync(`git -C "${workingDir}" branch --list`, { stdio: 'pipe' }).toString();
+    const lines = output.split('\n');
+    for (const line of lines) {
+      const name = line.replace(/^[* ]\s*/, '');
+      if (matchesTask(name, taskId)) return name;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function ensureWorktree(workingDir: string, taskId: string): string | null {
+  const existing = findWorktreeByTask(workingDir, taskId);
+  if (existing) return existing.path;
+
+  const branch = findBranchByTask(workingDir, taskId);
+  if (!branch) return null;
+
+  const wtPath = path.join(workingDir, '.claude/worktrees', branch.replace(/^worktree-/, ''));
+  try {
+    execSync(`git -C "${workingDir}" worktree add "${wtPath}" "${branch}"`, { stdio: 'pipe' });
+    return wtPath;
+  } catch (e) {
+    console.error(`[SessionManager] Failed to recreate worktree from branch ${branch}:`, (e as Error).message);
+    return null;
+  }
 }
 
 export function getRunningCount(): number {
@@ -70,6 +158,11 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
   writeProtocolFile(protocolPath);
   writeMcpConfig(mcpConfigPath);
 
+  const useWorktree = isGitRepo(workingDir);
+  if (useWorktree) {
+    cleanupWorktree(workingDir, task.id);
+  }
+
   db.prepare(`UPDATE tasks SET status = 'running', session_id = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(sessionId, task.id);
 
@@ -81,6 +174,7 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
   const args = [
     '-p', task.description,
     '--session-id', sessionId,
+    ...(useWorktree ? ['-w', getWorktreeName(task.id)] : []),
     '--output-format', 'stream-json',
     '--verbose',
     '--permission-mode', 'bypassPermissions',
@@ -236,10 +330,12 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     '--append-system-prompt-file', protocolPath,
   ];
 
-  console.log(`[SessionManager] Resuming: claude ${args.join(' ')}`);
+  const resumeCwd = ensureWorktree(workingDir, task.id) || workingDir;
+
+  console.log(`[SessionManager] Resuming: claude ${args.join(' ')} (cwd=${resumeCwd})`);
 
   const proc = spawn('claude', args, {
-    cwd: workingDir,
+    cwd: resumeCwd,
     stdio: 'pipe',
   });
 

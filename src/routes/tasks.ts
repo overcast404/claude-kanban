@@ -6,7 +6,7 @@ import os from 'os';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import { Task, TaskCreateInput, Decision } from '../types';
-import { startTask, resumeSession, stopSessionManager, getRunningCount } from '../services/session-manager';
+import { startTask, resumeSession, stopSessionManager, getRunningCount, cleanupWorktree } from '../services/session-manager';
 
 function getDataDir(): string {
   return process.env.CLAUDE_KANBAN_DATA_DIR || path.join(os.homedir(), '.claude-kanban');
@@ -145,11 +145,19 @@ tasksRouter.post('/:id/decide', (req: Request, res: Response) => {
 // Approve task (reviewing -> done)
 tasksRouter.post('/:id/approve', (req: Request, res: Response) => {
   const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
+  if (project) {
+    cleanupWorktree(project.working_dir, task.id, true);
+  }
+
   db.prepare('UPDATE tasks SET status = \'done\', updated_at = datetime(\'now\') WHERE id = ?')
     .run(req.params.id);
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
-  broadcast({ type: 'task_updated', payload: task });
-  res.json(task);
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  broadcast({ type: 'task_updated', payload: updated });
+  res.json(updated);
 });
 
 // Reject task (reviewing -> running) with feedback
@@ -242,6 +250,12 @@ tasksRouter.delete('/:id', (req: Request, res: Response) => {
   stopSessionManager(req.params.id);
   const db = getDb();
   const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(req.params.id) as { project_id: string } | undefined;
+  if (task?.project_id) {
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
+    if (project) {
+      cleanupWorktree(project.working_dir, req.params.id);
+    }
+  }
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   broadcast({ type: 'task_deleted', payload: { id: req.params.id, project_id: task?.project_id } });
   const logFile = path.join(getDataDir(), 'logs', `${req.params.id}.log`);
