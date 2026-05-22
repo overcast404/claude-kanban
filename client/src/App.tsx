@@ -6,7 +6,7 @@ import { type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
 import { TopBar } from './components/TopBar';
-import { ListPanel } from './components/ListPanel';
+import { KanbanBoard } from './components/KanbanBoard';
 import { DetailPanel } from './components/DetailPanel';
 import { ProjectView } from './components/ProjectView';
 import { CreateTaskModal } from './components/CreateTaskModal';
@@ -785,8 +785,7 @@ export default function App() {
             </>
           ) : (
             <div className="flex-1 min-w-0">
-              <ListPanel
-                activeTab={activeTab as TabKey}
+              <KanbanBoard
                 tasksByProject={tasksByProject}
                 projectNames={projectNames}
                 selectedTaskId={selectedTaskId}
@@ -799,7 +798,7 @@ export default function App() {
         </div>
       </div>
 
-      {activeTab !== 'projects' && activeTab !== 'chat' && detailVisible && (
+      {activeTab === 'board' && detailVisible && (
         isMobile ? (
           detailPanel
         ) : (
