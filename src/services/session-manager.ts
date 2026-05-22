@@ -7,7 +7,9 @@ import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import type { Task, Project } from '../types';
 
-const MANAGER_PORT = parseInt(process.env.PORT || '14567', 10);
+function getManagerPort(): number {
+  return parseInt(process.env.PORT || '14567', 10);
+}
 const WORKTREE_PREFIX = 'kanban-';
 
 const runningProcesses = new Map<string, ChildProcess>();
@@ -431,10 +433,10 @@ function generateSessionId(_taskId: string): string {
 }
 
 function writeHooksConfig(filePath: string, taskId: string): void {
-  const hookUrl = `http://localhost:${MANAGER_PORT}/api/hooks/${taskId}`;
+  const hookUrl = `http://localhost:${getManagerPort()}/api/hooks/${taskId}`;
 
   const config = {
-    allowedHttpHookUrls: [`http://localhost:${MANAGER_PORT}/*`],
+    allowedHttpHookUrls: [`http://localhost:${getManagerPort()}/*`],
     hooks: {
       PreToolUse: [
         {
@@ -501,7 +503,7 @@ function writeMcpConfig(filePath: string): void {
     mcpServers: {
       manager: {
         type: 'http' as const,
-        url: `http://localhost:${MANAGER_PORT}/mcp/sse`,
+        url: `http://localhost:${getManagerPort()}/mcp/sse`,
       },
     },
   };

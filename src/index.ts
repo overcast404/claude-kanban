@@ -23,6 +23,7 @@ export function createApp(config: AppConfig) {
   const { port, dataDir, staticDir } = config;
 
   process.env.CLAUDE_KANBAN_DATA_DIR = dataDir;
+  process.env.PORT = String(port);
 
   const app = express();
   app.use(cors());
