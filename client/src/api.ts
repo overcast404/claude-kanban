@@ -88,6 +88,7 @@ export interface ChatMessageRow {
   quoteMessageId?: string;
   decision?: unknown;
   round: number;
+  checkpointCommit?: string;
   timestamp: string;
 }
 export const fetchChatMessages = (limit = 20, offset = 0) =>
@@ -96,3 +97,7 @@ export const saveChatMessage = (msg: ChatMessageRow) =>
   request<{ ok: boolean }>('/chat-messages', { method: 'POST', body: JSON.stringify(msg) });
 export const deleteChatMessages = (taskId: string, type?: string) =>
   request<void>(`/chat-messages/${encodeURIComponent(taskId)}${type ? `?type=${encodeURIComponent(type)}` : ''}`, { method: 'DELETE' });
+export const rewindTask = (taskId: string, messageId: string) =>
+  request<{ task: Task; rewindTarget: string }>(`/tasks/${taskId}/rewind`, { method: 'POST', body: JSON.stringify({ messageId }) });
+export const forkTask = (taskId: string, messageId: string, mode: 'fork' | 'fork-rewind') =>
+  request<{ task: Task; forkedFrom: string }>(`/tasks/${taskId}/fork`, { method: 'POST', body: JSON.stringify({ messageId, mode }) });

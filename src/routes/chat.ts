@@ -13,6 +13,7 @@ interface ChatMessageRow {
   quote_message_id: string | null;
   decision_json: string | null;
   round: number;
+  checkpoint_commit: string | null;
   timestamp: string;
 }
 
@@ -27,6 +28,7 @@ function rowToMsg(row: ChatMessageRow) {
     quoteMessageId: row.quote_message_id || undefined,
     decision: row.decision_json ? (() => { const d = JSON.parse(row.decision_json); if (typeof d.options === 'string') d.options = JSON.parse(d.options); return d; })() : undefined,
     round: row.round,
+    checkpointCommit: row.checkpoint_commit || undefined,
     timestamp: row.timestamp,
   };
 }
@@ -54,7 +56,7 @@ chatRouter.get('/', (req: Request, res: Response) => {
 // POST /api/chat-messages — create a single message
 chatRouter.post('/', (req: Request, res: Response) => {
   const db = getDb();
-  const { id, taskId, projectId, projectName, type, content, quoteMessageId, decision, round, timestamp } = req.body;
+  const { id, taskId, projectId, projectName, type, content, quoteMessageId, decision, round, checkpointCommit, timestamp } = req.body;
 
   if (!id || !taskId || !projectId || !type) {
     res.status(400).json({ error: 'Missing required fields: id, taskId, projectId, type' });
@@ -62,11 +64,11 @@ chatRouter.post('/', (req: Request, res: Response) => {
   }
 
   db.prepare(`
-    INSERT OR REPLACE INTO chat_messages (id, task_id, project_id, project_name, type, content, quote_message_id, decision_json, round, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO chat_messages (id, task_id, project_id, project_name, type, content, quote_message_id, decision_json, round, checkpoint_commit, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, taskId, projectId, projectName || '', type, content || '', quoteMessageId || null,
-    decision ? JSON.stringify(decision) : null, round || 0, timestamp || new Date().toISOString()
+    decision ? JSON.stringify(decision) : null, round || 0, checkpointCommit || null, timestamp || new Date().toISOString()
   );
 
   res.status(201).json({ ok: true });

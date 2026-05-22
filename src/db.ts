@@ -48,6 +48,8 @@ function initSchema(db: Database.Database): void {
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','deciding','reviewing','done')),
       session_id TEXT,
       summary TEXT,
+      checkpoint_commit TEXT,
+      initial_commit TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -80,10 +82,16 @@ function initSchema(db: Database.Database): void {
       quote_message_id TEXT,
       decision_json TEXT,
       round INTEGER NOT NULL DEFAULT 0,
+      checkpoint_commit TEXT,
       timestamp TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
     );
 
     CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp);
   `);
+
+  // Migrations for existing databases
+  try { db.exec(`ALTER TABLE tasks ADD COLUMN checkpoint_commit TEXT`); } catch { /* column exists */ }
+  try { db.exec(`ALTER TABLE tasks ADD COLUMN initial_commit TEXT`); } catch { /* column exists */ }
+  try { db.exec(`ALTER TABLE chat_messages ADD COLUMN checkpoint_commit TEXT`); } catch { /* column exists */ }
 }

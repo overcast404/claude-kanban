@@ -7,10 +7,13 @@ interface Props {
   message: ChatMessage;
   getQuotedMessage: (id: string) => ChatMessage | undefined;
   isTaskDone: boolean;
+  isLatestReview: boolean;
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
+  onRewind: (msg: ChatMessage) => void;
+  onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
   onThreadOpen: (taskId: string) => void;
 }
 
@@ -38,7 +41,48 @@ function QuoteRef({ text, onClick }: { text: string; onClick?: () => void }) {
   );
 }
 
-export function ChatBubble({ message, getQuotedMessage, isTaskDone, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
+function ForkMenu({ onRewind, onFork, isDone }: { onRewind: () => void; onFork: (mode: 'fork' | 'fork-rewind') => void; isDone: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative inline-flex">
+      <button
+        className="text-warm-text-secondary hover:text-warm-brown transition-colors p-0.5 rounded"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        title="分叉/回退"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="4" r="1.5"/><circle cx="4" cy="8" r="1.5"/><circle cx="4" cy="12" r="1.5"/></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 bottom-full mb-1 bg-white border border-warm-border rounded-lg shadow-lg z-20 w-44 py-1">
+          <button
+            className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-gray-50 flex items-center gap-2"
+            onClick={() => { setOpen(false); onFork('fork'); }}
+          >
+            ⑂ 分叉对话
+          </button>
+          {!isDone && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-gray-50 flex items-center gap-2"
+              onClick={() => { setOpen(false); onRewind(); }}
+            >
+              ⏪ 回退代码
+            </button>
+          )}
+          {!isDone && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-gray-50 flex items-center gap-2"
+              onClick={() => { setOpen(false); onFork('fork-rewind'); }}
+            >
+              ⑂⏪ 分叉并回退
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestReview, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
   const { type, projectName, content, round } = message;
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState('');
@@ -66,6 +110,13 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, onDecisionCl
           )}
           <div className="whitespace-pre-wrap break-words">{content}</div>
           <QuoteReplyButton side="left" onClick={() => onQuoteReply(message)} />
+          <div className="absolute -right-1.5 top-1/2 -translate-y-1/2 translate-x-full opacity-0 group-hover:opacity-100 transition-opacity">
+            <ForkMenu
+              onRewind={() => onRewind(message)}
+              onFork={(mode) => onFork(message, mode)}
+              isDone={isTaskDone}
+            />
+          </div>
         </div>
       </div>
     );
@@ -212,11 +263,19 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, onDecisionCl
             <div className="mb-2"><MarkdownContent>{content}</MarkdownContent></div>
             <div className="flex gap-2">
               {isTaskDone ? (
-                <span className="px-4 py-1.5 bg-gray-200 text-warm-text-secondary rounded-md text-[11px] inline-flex items-center gap-1 cursor-default">
-                  <Icon name="check-circle" size={12} />
-                  已完成
-                </span>
-              ) : (
+                <>
+                  <span className="px-4 py-1.5 bg-gray-200 text-warm-text-secondary rounded-md text-[11px] inline-flex items-center gap-1 cursor-default">
+                    <Icon name="check-circle" size={12} />
+                    已完成
+                  </span>
+                  <button
+                    onClick={() => onQuoteReply(message)}
+                    className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
+                  >
+                    💬 回复
+                  </button>
+                </>
+              ) : isLatestReview ? (
                 <>
                   <button
                     onClick={() => onApprove(message)}
@@ -231,12 +290,15 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, onDecisionCl
                     💬 回复
                   </button>
                 </>
-              )}
+              ) : null}
             </div>
           </>
         )}
 
-        <QuoteReplyButton side="right" onClick={() => onQuoteReply(message)} />
+        {/* Hide floating reply button on historical review bubbles that have no actions */}
+        {(!isReview || isTaskDone || isLatestReview) && (
+          <QuoteReplyButton side="right" onClick={() => onQuoteReply(message)} />
+        )}
       </div>
     </div>
   );

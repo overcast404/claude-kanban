@@ -163,8 +163,18 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     cleanupWorktree(workingDir, task.id);
   }
 
-  db.prepare(`UPDATE tasks SET status = 'running', session_id = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(sessionId, task.id);
+  // Capture initial git commit before Claude starts working
+  let initialCommit: string | null = null;
+  if (useWorktree) {
+    try {
+      initialCommit = execSync(`git -C "${workingDir}" rev-parse HEAD`, { stdio: 'pipe' }).toString().trim();
+    } catch (e) {
+      console.error(`[SessionManager] Failed to capture initial commit for task ${task.id}:`, (e as Error).message);
+    }
+  }
+
+  db.prepare(`UPDATE tasks SET status = 'running', session_id = ?, initial_commit = ?, checkpoint_commit = NULL, summary = NULL, updated_at = datetime('now') WHERE id = ?`)
+    .run(sessionId, initialCommit, task.id);
 
   const env = {
     ...process.env,
@@ -294,9 +304,26 @@ async function checkAndHandleCompletion(taskId: string, stdout: string): Promise
   if (task.status === 'deciding' || task.status === 'reviewing' || task.status === 'done' || task.status === 'pending') return;
 
   const summary = extractSummary(stdout);
-  console.log(`[SessionManager] Task ${taskId} exited without signal — marking as reviewing, stdout=${stdout.length}B, summary="${summary.slice(0, 80)}"`);
-  db.prepare(`UPDATE tasks SET status = 'reviewing', summary = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(summary, taskId);
+
+  // Capture git HEAD commit in the task's worktree
+  let checkpointCommit: string | null = null;
+  try {
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as Project | undefined;
+    if (project) {
+      const wt = findWorktreeByTask(project.working_dir, taskId);
+      if (wt) {
+        checkpointCommit = execSync(`git -C "${wt.path}" rev-parse HEAD`, { stdio: 'pipe' }).toString().trim();
+      } else {
+        checkpointCommit = execSync(`git -C "${project.working_dir}" rev-parse HEAD`, { stdio: 'pipe' }).toString().trim();
+      }
+    }
+  } catch (e) {
+    console.error(`[SessionManager] Failed to capture checkpoint commit for task ${taskId}:`, (e as Error).message);
+  }
+
+  console.log(`[SessionManager] Task ${taskId} exited without signal — marking as reviewing, stdout=${stdout.length}B, summary="${summary.slice(0, 80)}", commit=${checkpointCommit?.slice(0, 8)}`);
+  db.prepare(`UPDATE tasks SET status = 'reviewing', summary = ?, checkpoint_commit = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(summary, checkpointCommit, taskId);
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
   broadcast({ type: 'task_updated', payload: updated });

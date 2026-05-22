@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
-import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, fetchChatMessages, saveChatMessage, deleteChatMessages, fetchGitStatuses } from './api';
+import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, fetchChatMessages, saveChatMessage, deleteChatMessages, fetchGitStatuses, rewindTask, forkTask } from './api';
 import { useWebSocket } from './useWebSocket';
 import { type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
@@ -34,6 +34,7 @@ export interface ChatMessage {
   quoteMessageId?: string;
   decision?: Decision;
   round: number;
+  checkpointCommit?: string;
   timestamp: string;
 }
 
@@ -78,6 +79,7 @@ export default function App() {
       quoteMessageId: msg.quoteMessageId,
       decision: msg.decision,
       round: msg.round,
+      checkpointCommit: msg.checkpointCommit,
       timestamp: msg.timestamp,
     }).catch(() => {});
   }, []);
@@ -101,6 +103,16 @@ export default function App() {
     for (const taskList of Object.values(tasks)) {
       for (const t of taskList) {
         if (t.status === 'done') ids.add(t.id);
+      }
+    }
+    return ids;
+  }, [tasks]);
+
+  const reviewingTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const taskList of Object.values(tasks)) {
+      for (const t of taskList) {
+        if (t.status === 'reviewing') ids.add(t.id);
       }
     }
     return ids;
@@ -166,7 +178,7 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const loadedOffset = useRef(0);
 
-  const parseChatRows = useCallback((rows: { id: string; taskId: string; projectId: string; projectName: string; type: string; content: string; quoteMessageId?: string; decision?: unknown; round: number; timestamp: string }[]) => {
+  const parseChatRows = useCallback((rows: { id: string; taskId: string; projectId: string; projectName: string; type: string; content: string; quoteMessageId?: string; decision?: unknown; round: number; checkpointCommit?: string; timestamp: string }[]) => {
     return rows.map(r => {
       let decision: Decision | undefined;
       if (r.decision) {
@@ -176,7 +188,7 @@ export default function App() {
       return {
         id: r.id, taskId: r.taskId, projectId: r.projectId, projectName: r.projectName,
         type: r.type as ChatMessage['type'], content: r.content, quoteMessageId: r.quoteMessageId,
-        decision, round: r.round, timestamp: r.timestamp,
+        decision, round: r.round, checkpointCommit: r.checkpointCommit, timestamp: r.timestamp,
       };
     });
   }, []);
@@ -369,6 +381,7 @@ export default function App() {
             content: task.summary || '任务已完成',
             quoteMessageId: taskLastUserMsg.current[task.id],
             round: taskRounds.current[task.id] || 0,
+            checkpointCommit: task.checkpoint_commit || undefined,
             timestamp: new Date().toISOString(),
           }];
         });
@@ -701,6 +714,42 @@ export default function App() {
     }
   }, [handleRefresh]);
 
+  const handleRewind = useCallback(async (msg: ChatMessage) => {
+    if (!confirm(`将代码回退到"${msg.content.slice(0, 40)}"之前的状态，此后的对话和代码改动将被撤销。确定？`)) return;
+    try {
+      await rewindTask(msg.taskId, msg.id);
+      handleRefresh(msg.projectId);
+      // Reload chat to reflect trimmed messages
+      const rows = await fetchChatMessages(200, 0);
+      const msgs = parseChatRows(rows).reverse();
+      setChatMessages(msgs);
+    } catch (err) {
+      console.error('Rewind failed:', err);
+    }
+  }, [handleRefresh, parseChatRows]);
+
+  const handleFork = useCallback(async (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => {
+    const label = mode === 'fork-rewind' ? '分叉并回退代码' : '分叉对话';
+    if (!confirm(`将从此消息${label}，创建新的任务。确定？`)) return;
+    try {
+      const result = await forkTask(msg.taskId, msg.id, mode);
+      handleRefresh(msg.projectId);
+      // Navigate to the new task
+      setChatMessages(prev => [...prev, {
+        id: chatMsgId(),
+        taskId: result.task.id,
+        projectId: result.task.project_id,
+        projectName: prev.find(m => m.taskId === msg.taskId)?.projectName || '',
+        type: 'system',
+        content: `⑂ 已从任务分叉创建新任务`,
+        round: 0,
+        timestamp: new Date().toISOString(),
+      }]);
+    } catch (err) {
+      console.error('Fork failed:', err);
+    }
+  }, [handleRefresh]);
+
   const handleQuoteReply = useCallback((msg: ChatMessage) => {
     setQuoteTarget(msg);
   }, []);
@@ -815,6 +864,7 @@ export default function App() {
                 projects={projects}
                 messages={chatMessages}
                 doneTaskIds={doneTaskIds}
+                reviewingTaskIds={reviewingTaskIds}
                 quoteTarget={quoteTarget}
                 onCancelQuote={handleCancelQuote}
                 onSend={handleChatSend}
@@ -822,6 +872,8 @@ export default function App() {
                 onApprove={handleChatApprove}
                 onReject={handleChatReject}
                 onQuoteReply={handleQuoteReply}
+                onRewind={handleRewind}
+                onFork={handleFork}
                 onThreadOpen={handleThreadOpen}
                 onProjectClick={handleChatProjectClick}
                 mentionPrefill={mentionPrefill}

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -158,6 +159,146 @@ tasksRouter.post('/:id/approve', (req: Request, res: Response) => {
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   broadcast({ type: 'task_updated', payload: updated });
   res.json(updated);
+});
+
+// Rewind code to a user_message (revert git state, trim conversation)
+tasksRouter.post('/:id/rewind', (req: Request, res: Response) => {
+  const { messageId } = req.body;
+  if (!messageId) return res.status(400).json({ error: 'messageId required' });
+
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  if (task.status === 'done') return res.status(400).json({ error: 'Cannot rewind a done task' });
+
+  // Find the user_message
+  const userMsg = db.prepare(
+    'SELECT * FROM chat_messages WHERE id = ? AND task_id = ? AND type = ?'
+  ).get(messageId, req.params.id, 'user_message') as { id: string; content: string; timestamp: string; round: number } | undefined;
+  if (!userMsg) return res.status(404).json({ error: 'User message not found' });
+
+  // Find the target commit: the most recent ai_review BEFORE this user message
+  const prevReview = db.prepare(`
+    SELECT checkpoint_commit FROM chat_messages
+    WHERE task_id = ? AND type = 'ai_review' AND timestamp < ?
+    ORDER BY timestamp DESC LIMIT 1
+  `).get(req.params.id, userMsg.timestamp) as { checkpoint_commit: string | null } | undefined;
+
+  const targetCommit = prevReview?.checkpoint_commit || task.initial_commit;
+  if (!targetCommit) return res.status(400).json({ error: 'No checkpoint commit found for rewind target' });
+
+  // Stop any running Claude process
+  stopSessionManager(req.params.id);
+
+  // Reset git worktree to target commit
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
+  if (project) {
+    try {
+      const useWorktree = (() => {
+        try { execSync(`git -C "${project.working_dir}" rev-parse --git-dir`, { stdio: 'pipe' }); return true; } catch { return false; }
+      })();
+      if (useWorktree) {
+        const wtList = execSync(`git -C "${project.working_dir}" worktree list --porcelain`, { stdio: 'pipe' }).toString();
+        let wtPath = '';
+        for (const block of wtList.split('\n\n')) {
+          if (block.includes(task.id)) {
+            for (const line of block.split('\n')) {
+              if (line.startsWith('worktree ')) wtPath = line.slice('worktree '.length);
+            }
+            break;
+          }
+        }
+        const cwd = wtPath || project.working_dir;
+        execSync(`git -C "${cwd}" reset --hard "${targetCommit}"`, { stdio: 'pipe' });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: `Git reset failed: ${(e as Error).message}` });
+    }
+  }
+
+  // Delete chat messages after this user_message
+  db.prepare('DELETE FROM chat_messages WHERE task_id = ? AND timestamp > ?')
+    .run(req.params.id, userMsg.timestamp);
+
+  // Insert a system rewind marker
+  const markerId = uuid();
+  db.prepare(`
+    INSERT INTO chat_messages (id, task_id, project_id, project_name, type, content, quote_message_id, round, timestamp)
+    VALUES (?, ?, ?, ?, 'system', ?, ?, ?, datetime('now'))
+  `).run(markerId, task.id, task.project_id, '', `⏪ 代码已回退到 ${userMsg.content.slice(0, 40)} 之前的状态`, messageId, userMsg.round);
+
+  // Reset task to pending so user can restart
+  db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  broadcast({ type: 'task_updated', payload: updated });
+
+  res.json({ task: updated, rewindTarget: targetCommit.slice(0, 8) });
+});
+
+// Fork a new task from a user_message checkpoint
+tasksRouter.post('/:id/fork', (req: Request, res: Response) => {
+  const { messageId, mode } = req.body; // mode: 'fork' | 'fork-rewind'
+  if (!messageId) return res.status(400).json({ error: 'messageId required' });
+
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  // Find the user_message
+  const userMsg = db.prepare(
+    'SELECT * FROM chat_messages WHERE id = ? AND task_id = ? AND type = ?'
+  ).get(messageId, req.params.id, 'user_message') as { id: string; content: string; timestamp: string; round: number } | undefined;
+  if (!userMsg) return res.status(404).json({ error: 'User message not found' });
+
+  // Find the target commit
+  const prevReview = db.prepare(`
+    SELECT checkpoint_commit FROM chat_messages
+    WHERE task_id = ? AND type = 'ai_review' AND timestamp < ?
+    ORDER BY timestamp DESC LIMIT 1
+  `).get(req.params.id, userMsg.timestamp) as { checkpoint_commit: string | null } | undefined;
+
+  const targetCommit = prevReview?.checkpoint_commit || task.initial_commit;
+
+  // Create new task
+  const newTaskId = uuid();
+  db.prepare(`
+    INSERT INTO tasks (id, project_id, title, description, status, created_at)
+    VALUES (?, ?, ?, ?, 'pending', datetime('now'))
+  `).run(newTaskId, task.project_id, task.title, `${userMsg.content}（从任务分叉）`);
+
+  // Copy chat messages up to and including the user_message
+  const messages = db.prepare(`
+    SELECT * FROM chat_messages WHERE task_id = ? AND timestamp <= ? ORDER BY timestamp ASC
+  `).all(req.params.id, userMsg.timestamp) as any[];
+
+  const insertStmt = db.prepare(`
+    INSERT OR REPLACE INTO chat_messages (id, task_id, project_id, project_name, type, content, quote_message_id, decision_json, round, checkpoint_commit, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const msg of messages) {
+    insertStmt.run(
+      msg.id, newTaskId, msg.project_id, msg.project_name, msg.type,
+      msg.content, msg.quote_message_id, msg.decision_json, msg.round, msg.checkpoint_commit, msg.timestamp
+    );
+  }
+
+  // For fork-rewind: pre-create a git branch from the checkpoint commit
+  if (mode === 'fork-rewind' && targetCommit && project.working_dir) {
+    try {
+      execSync(`git -C "${project.working_dir}" branch kanban-${newTaskId} "${targetCommit}"`, { stdio: 'pipe' });
+    } catch (e) {
+      console.error(`[Fork] Failed to create branch from checkpoint:`, (e as Error).message);
+    }
+  }
+
+  const newTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(newTaskId);
+  broadcast({ type: 'task_created', payload: newTask });
+
+  res.status(201).json({ task: newTask, forkedFrom: req.params.id });
 });
 
 // Reject task (reviewing -> running) with feedback

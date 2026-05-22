@@ -1,10 +1,11 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import type { ChatMessage } from '../App';
 import { ChatBubble } from './ChatBubble';
 
 interface Props {
   messages: ChatMessage[];
   doneTaskIds: Set<string>;
+  reviewingTaskIds: Set<string>;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -12,13 +13,30 @@ interface Props {
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
+  onRewind: (msg: ChatMessage) => void;
+  onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
   onThreadOpen: (taskId: string) => void;
 }
 
-export function ChatMessageList({ messages, doneTaskIds, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onThreadOpen }: Props) {
+export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
+
+  // Track the latest ai_review message per task — only the latest one shows "完成"
+  const latestReviewMsgIds = useMemo(() => {
+    const ids = new Set<string>();
+    const lastPerTask = new Map<string, string>(); // taskId -> messageId
+    for (const msg of messages) {
+      if (msg.type === 'ai_review') {
+        lastPerTask.set(msg.taskId, msg.id);
+      }
+    }
+    for (const id of lastPerTask.values()) {
+      ids.add(id);
+    }
+    return ids;
+  }, [messages]);
 
   useEffect(() => {
     if (!mountedRef.current) {
@@ -66,10 +84,13 @@ export function ChatMessageList({ messages, doneTaskIds, hasMore, loadingMore, o
           message={msg}
           getQuotedMessage={getQuotedMessage}
           isTaskDone={doneTaskIds.has(msg.taskId)}
+          isLatestReview={reviewingTaskIds.has(msg.taskId) && latestReviewMsgIds.has(msg.id)}
           onDecisionClick={onDecisionClick}
           onApprove={onApprove}
           onReject={onReject}
           onQuoteReply={onQuoteReply}
+          onRewind={onRewind}
+          onFork={onFork}
           onThreadOpen={onThreadOpen}
         />
       ))}

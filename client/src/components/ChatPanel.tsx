@@ -16,6 +16,7 @@ interface Props {
   projects: ProjectWithCounts[];
   messages: ChatMessage[];
   doneTaskIds: Set<string>;
+  reviewingTaskIds: Set<string>;
   quoteTarget: ChatMessage | null;
   onCancelQuote: () => void;
   onSend: (text: string, quoteMessageId?: string) => void;
@@ -23,6 +24,8 @@ interface Props {
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
+  onRewind: (msg: ChatMessage) => void;
+  onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
   onThreadOpen: (taskId: string) => void;
   onProjectClick: (projectName: string) => void;
   mentionPrefill: { name: string; n: number } | null;
@@ -44,6 +47,7 @@ export function ChatPanel(props: Props) {
         <ChatMessageList
           messages={props.messages}
           doneTaskIds={props.doneTaskIds}
+          reviewingTaskIds={props.reviewingTaskIds}
           hasMore={props.hasMore}
           loadingMore={props.loadingMore}
           onLoadMore={props.onLoadMore}
@@ -51,6 +55,8 @@ export function ChatPanel(props: Props) {
           onApprove={props.onApprove}
           onReject={props.onReject}
           onQuoteReply={props.onQuoteReply}
+          onRewind={props.onRewind}
+          onFork={props.onFork}
           onThreadOpen={props.onThreadOpen}
         />
         <ChatInput

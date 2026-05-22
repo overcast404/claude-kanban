@@ -15,6 +15,8 @@ export interface Task {
   status: TaskStatus;
   session_id: string | null;
   summary: string | null;
+  checkpoint_commit: string | null;
+  initial_commit: string | null;
   created_at: string;
   updated_at: string;
 }
