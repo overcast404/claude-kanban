@@ -37,6 +37,8 @@ hooksRouter.post('/:taskId', (req: Request, res: Response) => {
     broadcast({ type: 'decision_created', payload: { task, decision } });
 
     return res.json({
+      continue: false,
+      stopReason: 'Question intercepted by Claude Kanban - awaiting user decision',
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
