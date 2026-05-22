@@ -156,14 +156,16 @@ export default function App() {
 
   useEffect(() => {
     fetchChatMessages(PAGE_SIZE, 0).then(rows => {
-      if (rows.length > 0) {
-        const msgs = parseChatRows(rows).reverse(); // DB returns DESC, we want ASC
+      // Filter out ephemeral execution bubbles
+      const filtered = rows.filter(r => r.type !== 'ai_execution');
+      if (filtered.length > 0) {
+        const msgs = parseChatRows(filtered).reverse();
         for (const m of msgs) {
           if (m.type === 'user_message' && m.taskId) taskLastUserMsg.current[m.taskId] = m.id;
         }
         setChatMessages(msgs);
         setHasMore(rows.length >= PAGE_SIZE);
-        loadedOffset.current = rows.length;
+        loadedOffset.current = filtered.length;
       }
     }).catch(() => {});
   }, [parseChatRows]);
@@ -173,8 +175,9 @@ export default function App() {
     setLoadingMore(true);
     try {
       const rows = await fetchChatMessages(PAGE_SIZE, loadedOffset.current);
-      if (rows.length > 0) {
-        const olderMsgs = parseChatRows(rows).reverse();
+      const filtered = rows.filter(r => r.type !== 'ai_execution');
+      if (filtered.length > 0) {
+        const olderMsgs = parseChatRows(filtered).reverse();
         for (const m of olderMsgs) {
           if (m.type === 'user_message' && m.taskId && !taskLastUserMsg.current[m.taskId]) {
             taskLastUserMsg.current[m.taskId] = m.id;
@@ -196,6 +199,7 @@ export default function App() {
   useEffect(() => {
     const prev = prevMsgSnap.current;
     for (const msg of chatMessages) {
+      if (msg.type === 'ai_execution') continue; // ephemeral, never persist
       const decJson = msg.decision ? JSON.stringify(msg.decision) : '';
       if (!prev.ids.has(msg.id)) {
         // New message — save immediately
