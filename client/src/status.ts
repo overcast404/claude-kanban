@@ -21,19 +21,37 @@ export const STATUS_ORDER: TaskStatus[] = [
   'pending', 'running', 'deciding', 'reviewing', 'done',
 ];
 
-export const ACTION_LABEL = '待处理';
-export const ACTION_ICON: IconName = 'bell';
-export const ACTION_STATUSES: TaskStatus[] = ['deciding', 'reviewing'];
-
-export const IN_PROGRESS_STATUSES: TaskStatus[] = ['pending', 'running'];
-export const IN_PROGRESS_LABEL = '进行中';
-export const IN_PROGRESS_ICON: IconName = 'zap';
+// Board column definitions
+export const BOARD_COLUMNS = [
+  {
+    key: 'active' as const,
+    icon: 'zap' as IconName,
+    label: '进行中',
+    statuses: ['pending', 'running'] as TaskStatus[],
+    accentBorder: 'border-b-2 border-b-warm-brown',
+    accentBg: 'bg-warm-brown',
+  },
+  {
+    key: 'attention' as const,
+    icon: 'bell' as IconName,
+    label: '待处理',
+    statuses: ['deciding', 'reviewing'] as TaskStatus[],
+    accentBorder: 'border-b-2 border-b-warm-danger',
+    accentBg: 'bg-warm-danger',
+  },
+  {
+    key: 'done' as const,
+    icon: 'archive' as IconName,
+    label: '已完成',
+    statuses: ['done'] as TaskStatus[],
+    accentBorder: 'border-b-2 border-b-warm-border',
+    accentBg: 'bg-warm-text-secondary',
+  },
+];
 
 export const TABS = [
-  { key: 'chat', icon: 'message-circle' as IconName, label: '聊天', statuses: [] as TaskStatus[] },
-  { key: 'in-progress', icon: IN_PROGRESS_ICON, label: IN_PROGRESS_LABEL, statuses: IN_PROGRESS_STATUSES },
-  { key: 'action', icon: ACTION_ICON, label: ACTION_LABEL, statuses: ACTION_STATUSES },
-  { key: 'done', icon: STATUS_ICON.done, label: STATUS_LABEL.done, statuses: ['done'] as TaskStatus[] },
+  { key: 'chat', icon: 'message-circle' as IconName, label: '聊天' },
+  { key: 'board', icon: 'clipboard' as IconName, label: '看板' },
 ] as const;
 
 export type TabKey = (typeof TABS)[number]['key'];
