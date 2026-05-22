@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ChatMessage } from '../App';
 import { Icon } from './Icon';
+import MarkdownContent from './MarkdownContent';
 
 interface Props {
   message: ChatMessage;
@@ -122,7 +123,7 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
           const resolved = !!message.decision?.answer;
           return (
             <>
-              <div className="mb-2 whitespace-pre-wrap text-[12px]">{content}</div>
+              <div className="mb-2"><MarkdownContent>{content}</MarkdownContent></div>
               {message.decision?.options && Array.isArray(message.decision.options) && message.decision.options.length > 0 && (
                 <div className="space-y-1">
                   {message.decision.options.map((opt, i) => {
@@ -202,7 +203,7 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
         {/* Review content */}
         {isReview && (
           <>
-            <div className="mb-2 whitespace-pre-wrap text-green-900">{content}</div>
+            <div className="mb-2"><MarkdownContent>{content}</MarkdownContent></div>
             <div className="flex gap-2">
               <button
                 onClick={() => onApprove(message)}

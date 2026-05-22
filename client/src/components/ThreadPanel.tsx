@@ -1,5 +1,6 @@
 import type { ChatMessage } from '../App';
 import { Icon } from './Icon';
+import MarkdownContent from './MarkdownContent';
 
 interface Props {
   taskId: string;
@@ -62,12 +63,16 @@ export function ThreadPanel({ taskId, taskTitle, messages, onClose }: Props) {
                       {msg.content.startsWith('↩ ') ? msg.content.split('\n')[0] : '↩ 回复'}
                     </div>
                   )}
-                  {/* Show content without the quote prefix for user messages */}
-                  <div className="whitespace-pre-wrap break-words">
-                    {isUser && msg.content.startsWith('↩ ')
-                      ? msg.content.split('\n').slice(1).join('\n') || msg.content
-                      : msg.content}
-                  </div>
+                  {/* Show markdown for AI messages, plain text for user */}
+                  {isUser ? (
+                    <div className="whitespace-pre-wrap break-words">
+                      {msg.content.startsWith('↩ ')
+                        ? msg.content.split('\n').slice(1).join('\n') || msg.content
+                        : msg.content}
+                    </div>
+                  ) : (
+                    <MarkdownContent>{msg.content}</MarkdownContent>
+                  )}
                   {/* Status badge for AI messages */}
                   {!isUser && (
                     <div className="text-[9px] text-warm-text-secondary mt-0.5">
