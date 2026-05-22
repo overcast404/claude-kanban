@@ -51,17 +51,19 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
   }
 
   if (type === 'user_message') {
+    const userQuotedMsg = message.quoteMessageId ? getQuotedMessage(message.quoteMessageId) : undefined;
+    const userQuoteText = userQuotedMsg
+      ? (() => { const c = userQuotedMsg.content.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim(); return c.slice(0, 30) + (c.length > 30 ? '...' : ''); })()
+      : '';
     return (
       <div className="flex justify-end px-3">
         <div className="group relative bg-warm-brown text-white px-3 py-2 rounded-xl rounded-br-sm max-w-[75%] text-[13px] leading-relaxed">
-          {message.quoteMessageId && (
-            <div className="text-[10px] opacity-60 mb-1 border-l-2 border-white/30 pl-2">
-              {content.startsWith('↩ ') ? content.split('\n')[0] : '↩ 引用回复'}
+          {userQuoteText && (
+            <div className="text-[10px] opacity-60 mb-1 border-l-2 border-white/30 pl-2 overflow-hidden text-ellipsis whitespace-nowrap">
+              ↩ {userQuoteText}
             </div>
           )}
-          <div className="whitespace-pre-wrap break-words">
-            {message.quoteMessageId ? content.split('\n').slice(1).join('\n') || content : content}
-          </div>
+          <div className="whitespace-pre-wrap break-words">{content}</div>
           <QuoteReplyButton side="left" onClick={() => onQuoteReply(message)} />
         </div>
       </div>
@@ -86,18 +88,11 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
 
   const label = round > 0 ? `${projectName} · 继续执行` : projectName;
 
-  // Get the quoted message text — strip quote prefix and newlines, single line only
+  // Get the quoted message text — single line, clean, truncated
   const quotedMsg = message.quoteMessageId ? getQuotedMessage(message.quoteMessageId) : undefined;
   const quoteText = quotedMsg
     ? (() => {
-        let text = quotedMsg.content;
-        // Remove "↩ ...\n" quote prefix from user reply messages
-        if (text.startsWith('↩ ')) {
-          const nl = text.indexOf('\n');
-          text = nl > 0 ? text.slice(nl + 1) : text.slice(2);
-        }
-        // Collapse whitespace and truncate
-        const clean = text.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const clean = quotedMsg.content.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
         return clean.slice(0, 20) + (clean.length > 20 ? '...' : '');
       })()
     : '';

@@ -11,6 +11,7 @@ interface Props {
 
 export function ThreadPanel({ taskId, taskTitle, messages, onClose }: Props) {
   const threadMessages = messages.filter(m => m.taskId === taskId);
+  const getQuotedMessage = (id: string) => messages.find(m => m.id === id);
 
   return (
     <div className="w-[340px] shrink-0 border-l border-warm-border bg-white flex flex-col">
@@ -57,19 +58,21 @@ export function ThreadPanel({ taskId, taskTitle, messages, onClose }: Props) {
                       ? 'border border-amber-400 rounded-bl-sm'
                       : 'bg-white border border-warm-border rounded-bl-sm'
                 }`}>
-                  {/* Quote reference */}
-                  {msg.quoteMessageId && (
-                    <div className="text-[9px] opacity-50 mb-0.5 border-l-2 pl-1.5 truncate" style={{ borderColor: isUser ? 'rgba(255,255,255,0.4)' : 'var(--color-warm-border)' }}>
-                      {msg.content.startsWith('↩ ') ? msg.content.split('\n')[0] : '↩ 回复'}
-                    </div>
-                  )}
+                  {/* Quote reference — lookup for display */}
+                  {msg.quoteMessageId && (() => {
+                    const quoted = getQuotedMessage(msg.quoteMessageId);
+                    const quoteText = quoted
+                      ? (() => { const c = quoted.content.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim(); return '↩ ' + c.slice(0, 25) + (c.length > 25 ? '...' : ''); })()
+                      : '↩ 回复';
+                    return (
+                      <div className="text-[9px] opacity-50 mb-0.5 border-l-2 pl-1.5 truncate" style={{ borderColor: isUser ? 'rgba(255,255,255,0.4)' : 'var(--color-warm-border)' }}>
+                        {quoteText}
+                      </div>
+                    );
+                  })()}
                   {/* Show markdown for AI messages, plain text for user */}
                   {isUser ? (
-                    <div className="whitespace-pre-wrap break-words">
-                      {msg.content.startsWith('↩ ')
-                        ? msg.content.split('\n').slice(1).join('\n') || msg.content
-                        : msg.content}
-                    </div>
+                    <div className="whitespace-pre-wrap break-words">{msg.content}</div>
                   ) : (
                     <MarkdownContent>{msg.content}</MarkdownContent>
                   )}

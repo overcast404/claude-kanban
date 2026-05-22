@@ -478,16 +478,15 @@ export default function App() {
           projectId: quotedMsg.projectId,
           projectName: quotedMsg.projectName,
           type: 'user_message',
-          content: '↩ ' + quotedMsg.content.slice(0, 50) + '\n' + text,
+          content: text,
           quoteMessageId,
           round: quotedMsg.round,
           timestamp: new Date().toISOString(),
         };
         setChatMessages(prev => [...prev, replyMsg]);
         taskLastUserMsg.current[quotedMsg.taskId] = replyMsg.id;
-        lastTaskStatus.current[quotedMsg.taskId] = 'running'; // prevent WS duplicate
+        lastTaskStatus.current[quotedMsg.taskId] = 'running';
 
-        // Optimistically create new AI execution bubble for resumed work
         const exeRound = (taskRounds.current[quotedMsg.taskId] || 0) + 1;
         taskRounds.current[quotedMsg.taskId] = exeRound;
         const exeBubble: ChatMessage = {
@@ -554,14 +553,13 @@ export default function App() {
   const handleChatDecision = useCallback(async (msg: ChatMessage, answer: string) => {
     if (!answer) return;
 
-    const quoteContent = msg.content.slice(0, 100);
     const replyMsg: ChatMessage = {
       id: chatMsgId(),
       taskId: msg.taskId,
       projectId: msg.projectId,
       projectName: msg.projectName,
       type: 'user_message',
-      content: '↩ ' + quoteContent + '\n' + answer,
+      content: answer,
       quoteMessageId: msg.id,
       round: msg.round,
       timestamp: new Date().toISOString(),
@@ -638,7 +636,7 @@ export default function App() {
       projectId: msg.projectId,
       projectName: msg.projectName,
       type: 'user_message',
-      content: feedback ? `↩ 驳回：${feedback}` : '↩ 驳回，请重新修改',
+      content: feedback || '驳回，请重新修改',
       quoteMessageId: msg.id,
       round: msg.round,
       timestamp: new Date().toISOString(),
