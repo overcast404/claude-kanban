@@ -28,7 +28,7 @@ function QuoteReplyButton({ side, onClick }: { side: 'left' | 'right'; onClick: 
 function QuoteRef({ text, onClick }: { text: string; onClick?: () => void }) {
   return (
     <div
-      className={`text-[10px] text-warm-text-secondary mb-1.5 border-l-2 border-warm-border pl-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-[180px] ${onClick ? 'cursor-pointer hover:text-warm-brown hover:border-warm-brown transition-colors' : ''}`}
+      className={`text-[10px] text-warm-text-secondary mb-1.5 border-l-2 border-warm-border pl-2 overflow-hidden text-ellipsis whitespace-nowrap ${onClick ? 'cursor-pointer hover:text-warm-brown hover:border-warm-brown transition-colors' : ''}`}
       onClick={onClick}
       title={onClick ? '点击查看完整对话' : undefined}
     >
@@ -86,10 +86,20 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
 
   const label = round > 0 ? `${projectName} · 继续执行` : projectName;
 
-  // Get the quoted message text — strip newlines, single line only
+  // Get the quoted message text — strip quote prefix and newlines, single line only
   const quotedMsg = message.quoteMessageId ? getQuotedMessage(message.quoteMessageId) : undefined;
   const quoteText = quotedMsg
-    ? (() => { const clean = quotedMsg.content.replace(/[\n\r]+/g, ' ').trim(); return clean.slice(0, 20) + (clean.length > 20 ? '...' : ''); })()
+    ? (() => {
+        let text = quotedMsg.content;
+        // Remove "↩ ...\n" quote prefix from user reply messages
+        if (text.startsWith('↩ ')) {
+          const nl = text.indexOf('\n');
+          text = nl > 0 ? text.slice(nl + 1) : text.slice(2);
+        }
+        // Collapse whitespace and truncate
+        const clean = text.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+        return clean.slice(0, 20) + (clean.length > 20 ? '...' : '');
+      })()
     : '';
 
   return (
