@@ -311,14 +311,8 @@ export default function App() {
               return prev; // unresolved bubble already waiting
             }
           }
-          // Remove latest ai_execution for this task
-          let filtered = prev;
-          for (let i = prev.length - 1; i >= 0; i--) {
-            if (prev[i].taskId === task.id && prev[i].type === 'ai_execution') {
-              filtered = prev.filter((_, idx) => idx !== i);
-              break;
-            }
-          }
+          // Remove ALL ai_execution bubbles for this task
+          const filtered = prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
           return [...filtered, {
             id: chatMsgId(),
             taskId: task.id,
@@ -334,15 +328,9 @@ export default function App() {
       }
 
       if (task.status === 'reviewing') {
-        // Create new ai_review bubble, remove latest ai_execution
+        // Create new ai_review bubble, remove ALL ai_execution for this task
         setChatMessages(prev => {
-          let filtered = prev;
-          for (let i = prev.length - 1; i >= 0; i--) {
-            if (prev[i].taskId === task.id && prev[i].type === 'ai_execution') {
-              filtered = prev.filter((_, idx) => idx !== i);
-              break;
-            }
-          }
+          const filtered = prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
           return [...filtered, {
             id: chatMsgId(),
             taskId: task.id,
@@ -389,14 +377,8 @@ export default function App() {
       const proj = projectsRef.current.find(p => p.id === task.project_id);
       const pName = proj?.name || task.project_id;
       setChatMessages(prev => {
-        // Remove latest ai_execution for this task
-        let filtered = prev;
-        for (let i = prev.length - 1; i >= 0; i--) {
-          if (prev[i].taskId === task.id && prev[i].type === 'ai_execution') {
-            filtered = prev.filter((_, idx) => idx !== i);
-            break;
-          }
-        }
+        // Remove ALL ai_execution bubbles for this task
+        const filtered = prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
         // Find the latest unresolved ai_decision and populate it
         for (let i = filtered.length - 1; i >= 0; i--) {
           if (filtered[i].taskId === task.id && filtered[i].type === 'ai_decision') {
