@@ -80,7 +80,7 @@ export function ChatBubble({ message, getQuotedMessage, onDecisionClick, onAppro
     borderStyle = 'border-warm-brown';
     statusBadge = '需决策';
   } else if (isReview) {
-    borderStyle = 'border-amber-300';
+    borderStyle = 'border-amber-400';
     statusBadge = null;
   }
 

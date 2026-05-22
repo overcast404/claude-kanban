@@ -54,7 +54,7 @@ export function ThreadPanel({ taskId, taskTitle, messages, onClose }: Props) {
                   isUser
                     ? 'bg-warm-brown text-white rounded-br-sm'
                     : isReview
-                      ? 'border border-amber-300 rounded-bl-sm'
+                      ? 'border border-amber-400 rounded-bl-sm'
                       : 'bg-white border border-warm-border rounded-bl-sm'
                 }`}>
                   {/* Quote reference */}
