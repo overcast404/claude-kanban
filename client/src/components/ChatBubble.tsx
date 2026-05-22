@@ -102,7 +102,7 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestRevi
       : '';
     return (
       <div className="flex justify-end px-3">
-        <div className="group relative bg-warm-brown text-white px-3 py-2 rounded-xl rounded-br-sm max-w-[75%] text-[13px] leading-relaxed">
+        <div className="group relative bg-warm-brown text-white px-3 py-2 rounded-xl rounded-br-sm max-w-[75%] min-w-0 text-[13px] leading-relaxed">
           {userQuoteText && (
             <div className="text-[10px] opacity-60 mb-1 border-l-2 border-white/30 pl-2 overflow-hidden text-ellipsis whitespace-nowrap">
               ↩ {userQuoteText}
@@ -151,7 +151,7 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestRevi
 
   return (
     <div className="flex justify-start px-3">
-      <div className={`group relative border ${borderStyle} ${!isReview ? 'bg-white' : ''} px-3 py-2.5 rounded-xl rounded-bl-sm max-w-[75%] text-[13px] leading-relaxed shadow-sm`}>
+      <div className={`group relative border ${borderStyle} ${!isReview ? 'bg-white' : ''} px-3 py-2.5 rounded-xl rounded-bl-sm max-w-[75%] min-w-0 text-[13px] leading-relaxed shadow-sm`}>
         {/* Quote reference with real text, clickable to open thread */}
         {quoteText && (
           <QuoteRef text={quoteText} onClick={() => onThreadOpen(message.taskId)} />
