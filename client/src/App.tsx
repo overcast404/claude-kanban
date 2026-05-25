@@ -21,7 +21,7 @@ type Tab = 'projects' | TabKey;
 
 type ProjectData = Project & {
   count_pending: number; count_running: number; count_deciding: number;
-  count_reviewing: number; count_done: number;
+  count_reviewing: number; count_stopped: number; count_done: number;
 };
 
 export interface ChatMessage {
@@ -113,6 +113,26 @@ export default function App() {
     for (const taskList of Object.values(tasks)) {
       for (const t of taskList) {
         if (t.status === 'reviewing') ids.add(t.id);
+      }
+    }
+    return ids;
+  }, [tasks]);
+
+  const runningTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const taskList of Object.values(tasks)) {
+      for (const t of taskList) {
+        if (t.status === 'running') ids.add(t.id);
+      }
+    }
+    return ids;
+  }, [tasks]);
+
+  const stoppedTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const taskList of Object.values(tasks)) {
+      for (const t of taskList) {
+        if (t.status === 'stopped') ids.add(t.id);
       }
     }
     return ids;
@@ -539,10 +559,11 @@ export default function App() {
 
   // === Chat: user action handlers ===
   const handleChatSend = useCallback(async (text: string, quoteMessageId?: string, useWorktree?: boolean) => {
-    // If replying to an AI bubble (review or decision), continue the existing task
+    // If replying to an actionable AI bubble, continue the existing task.
     if (quoteMessageId) {
       const quotedMsg = chatMessages.find(m => m.id === quoteMessageId);
-      if (quotedMsg && (quotedMsg.type === 'ai_review' || quotedMsg.type === 'ai_decision')) {
+      const isStoppedExecution = quotedMsg?.type === 'ai_execution' && stoppedTaskIds.has(quotedMsg.taskId);
+      if (quotedMsg && (quotedMsg.type === 'ai_review' || quotedMsg.type === 'ai_decision' || isStoppedExecution)) {
         const replyMsg: ChatMessage = {
           id: chatMsgId(),
           taskId: quotedMsg.taskId,
@@ -574,7 +595,11 @@ export default function App() {
         setChatMessages(prev => [...prev, exeBubble]);
 
         try {
-          await rejectTask(quotedMsg.taskId, text);
+          if (isStoppedExecution) {
+            await resumeStoppedTask(quotedMsg.taskId, text);
+          } else {
+            await rejectTask(quotedMsg.taskId, text);
+          }
           handleRefresh(quotedMsg.projectId);
         } catch (err) {
           console.error('Reply failed:', err);
@@ -619,7 +644,7 @@ export default function App() {
       console.error('Chat send failed:', err);
       setChatMessages(prev => prev.filter(m => m.id !== userMsg.id));
     }
-  }, [projects, loadProjects, loadTasks, chatMessages, handleRefresh]);
+  }, [projects, loadProjects, loadTasks, chatMessages, handleRefresh, stoppedTaskIds]);
 
   const handleChatDecision = useCallback(async (msg: ChatMessage, answer: string) => {
     if (!answer) return;
@@ -783,6 +808,15 @@ export default function App() {
     setThreadTaskId(null);
   }, []);
 
+  const handleChatStopTask = useCallback(async (msg: ChatMessage) => {
+    try {
+      await stopTask(msg.taskId);
+      handleRefresh(msg.projectId);
+    } catch (err) {
+      console.error('Stop failed:', err);
+    }
+  }, [handleRefresh]);
+
   const allTasks = Object.values(tasks).flat();
   const selectedTask = allTasks.find(t => t.id === selectedTaskId) || null;
 
@@ -873,6 +907,8 @@ export default function App() {
               <ChatPanel
                 projects={projects}
                 messages={chatMessages}
+                runningTaskIds={runningTaskIds}
+                stoppedTaskIds={stoppedTaskIds}
                 doneTaskIds={doneTaskIds}
                 reviewingTaskIds={reviewingTaskIds}
                 taskWorktrees={taskWorktrees}
@@ -882,6 +918,7 @@ export default function App() {
                 onDecisionClick={handleChatDecision}
                 onApprove={handleChatApprove}
                 onReject={handleChatReject}
+                onStopTask={handleChatStopTask}
                 onQuoteReply={handleQuoteReply}
                 onRewind={handleRewind}
                 onFork={handleFork}

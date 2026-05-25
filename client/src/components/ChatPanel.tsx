@@ -9,12 +9,15 @@ interface ProjectWithCounts extends Project {
   count_running: number;
   count_deciding: number;
   count_reviewing: number;
+  count_stopped: number;
   count_done?: number;
 }
 
 interface Props {
   projects: ProjectWithCounts[];
   messages: ChatMessage[];
+  runningTaskIds: Set<string>;
+  stoppedTaskIds: Set<string>;
   doneTaskIds: Set<string>;
   reviewingTaskIds: Set<string>;
   taskWorktrees: Record<string, string | null | undefined>;
@@ -24,6 +27,7 @@ interface Props {
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
+  onStopTask: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
   onRewind: (msg: ChatMessage) => void;
   onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
@@ -47,6 +51,8 @@ export function ChatPanel(props: Props) {
       <div className="flex-1 flex flex-col min-w-0">
         <ChatMessageList
           messages={props.messages}
+          runningTaskIds={props.runningTaskIds}
+          stoppedTaskIds={props.stoppedTaskIds}
           doneTaskIds={props.doneTaskIds}
           reviewingTaskIds={props.reviewingTaskIds}
           taskWorktrees={props.taskWorktrees}
@@ -56,6 +62,7 @@ export function ChatPanel(props: Props) {
           onDecisionClick={props.onDecisionClick}
           onApprove={props.onApprove}
           onReject={props.onReject}
+          onStopTask={props.onStopTask}
           onQuoteReply={props.onQuoteReply}
           onRewind={props.onRewind}
           onFork={props.onFork}

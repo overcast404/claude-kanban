@@ -6,12 +6,16 @@ import MarkdownContent from './MarkdownContent';
 interface Props {
   message: ChatMessage;
   getQuotedMessage: (id: string) => ChatMessage | undefined;
+  isTaskRunning: boolean;
+  isTaskStopped: boolean;
   isTaskDone: boolean;
   isLatestReview: boolean;
+  isLatestExecution: boolean;
   worktree?: string | null;
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
+  onStopTask: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
   onRewind: (msg: ChatMessage) => void;
   onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
@@ -54,27 +58,30 @@ function ForkMenu({ onRewind, onFork, isDone }: { onRewind: () => void; onFork: 
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="4" r="1.5"/><circle cx="4" cy="8" r="1.5"/><circle cx="4" cy="12" r="1.5"/></svg>
       </button>
       {open && (
-        <div className="absolute right-0 bottom-full mb-1 bg-white border border-warm-border rounded-lg shadow-lg z-20 w-44 py-1">
+        <div className="absolute right-0 bottom-full mb-1 bg-white border border-warm-border rounded-lg shadow-lg z-20 w-44 py-1 text-warm-text">
           <button
-            className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-gray-50 flex items-center gap-2"
+            className="w-full text-left px-3 py-1.5 text-[11px] font-medium text-warm-text hover:bg-warm-bg hover:text-warm-brown flex items-center gap-2"
             onClick={() => { setOpen(false); onFork('fork'); }}
           >
-            ⑂ 分叉对话
+            <Icon name="git-branch" size={12} className="shrink-0" />
+            <span className="truncate">分叉对话</span>
           </button>
           {!isDone && (
             <button
-              className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-gray-50 flex items-center gap-2"
+              className="w-full text-left px-3 py-1.5 text-[11px] font-medium text-warm-text hover:bg-warm-bg hover:text-warm-brown flex items-center gap-2"
               onClick={() => { setOpen(false); onRewind(); }}
             >
-              ⏪ 回退代码
+              <Icon name="arrow-left" size={12} className="shrink-0" />
+              <span className="truncate">回退代码</span>
             </button>
           )}
           {!isDone && (
             <button
-              className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-gray-50 flex items-center gap-2"
+              className="w-full text-left px-3 py-1.5 text-[11px] font-medium text-warm-text hover:bg-warm-bg hover:text-warm-brown flex items-center gap-2"
               onClick={() => { setOpen(false); onFork('fork-rewind'); }}
             >
-              ⑂⏪ 分叉并回退
+              <Icon name="git-branch" size={12} className="shrink-0" />
+              <span className="truncate">分叉并回退</span>
             </button>
           )}
         </div>
@@ -83,7 +90,7 @@ function ForkMenu({ onRewind, onFork, isDone }: { onRewind: () => void; onFork: 
   );
 }
 
-export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestReview, worktree, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
+export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskStopped, isTaskDone, isLatestReview, isLatestExecution, worktree, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
   const { type, projectName, content, round } = message;
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState('');
@@ -102,7 +109,7 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestRevi
       ? (() => { const c = userQuotedMsg.content.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim(); return c.slice(0, 30) + (c.length > 30 ? '...' : ''); })()
       : '';
     return (
-      <div className="flex justify-end px-3">
+      <div className="flex justify-end pl-3 pr-8">
         <div className="group relative bg-warm-brown text-white px-3 py-2 rounded-xl rounded-br-sm max-w-[75%] min-w-0 text-[13px] leading-relaxed">
           {userQuoteText && (
             <div className="text-[10px] opacity-60 mb-1 border-l-2 border-white/30 pl-2 overflow-hidden text-ellipsis whitespace-nowrap">
@@ -130,7 +137,12 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestRevi
   let borderStyle = 'border-warm-border';
   let statusBadge: string | null = null;
   if (type === 'ai_execution') {
-    statusBadge = '执行中';
+    if (isLatestExecution && isTaskStopped) {
+      borderStyle = 'border-amber-400';
+      statusBadge = '已停止';
+    } else if (isLatestExecution && isTaskRunning) {
+      statusBadge = '执行中';
+    }
   } else if (isDecision) {
     borderStyle = 'border-warm-brown';
     statusBadge = '需决策';
@@ -179,6 +191,39 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestRevi
         {(type === 'ai_execution' && content) && (
           <div className="font-mono text-[10px] text-warm-text-secondary leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto bg-gray-50 rounded p-1.5">
             {content}
+          </div>
+        )}
+
+        {type === 'ai_execution' && isLatestExecution && (isTaskRunning || isTaskStopped) && (
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-[10px] text-warm-text-secondary opacity-70">
+              <span className={`h-1 w-1 rounded-full shrink-0 ${isTaskRunning ? 'bg-emerald-500' : 'bg-warm-tan'}`} />
+              {isTaskRunning ? '任务执行中' : '任务已暂停'}
+            </span>
+            {isTaskRunning && (
+              <button
+                type="button"
+                title="停止任务"
+                aria-label="停止任务"
+                onClick={() => onStopTask(message)}
+                className="inline-flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 text-[10px] font-medium text-warm-text-secondary opacity-70 transition-colors duration-200 hover:bg-warm-danger-bg hover:text-warm-danger hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-100"
+              >
+                <Icon name="square" size={10} />
+                停止
+              </button>
+            )}
+            {isTaskStopped && (
+              <button
+                type="button"
+                title="回复继续"
+                aria-label="回复继续"
+                onClick={() => onQuoteReply(message)}
+                className="inline-flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 text-[10px] font-medium text-warm-brown opacity-80 transition-colors duration-200 hover:bg-warm-brown/10 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan"
+              >
+                <Icon name="corner-down-left" size={10} />
+                回复继续
+              </button>
+            )}
           </div>
         )}
 

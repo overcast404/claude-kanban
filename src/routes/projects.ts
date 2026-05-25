@@ -17,6 +17,7 @@ projectsRouter.get('/', (_req: Request, res: Response) => {
       (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'running') AS count_running,
       (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'deciding') AS count_deciding,
       (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'reviewing') AS count_reviewing,
+      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'stopped') AS count_stopped,
       (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') AS count_done
     FROM projects p
     ORDER BY p.created_at DESC

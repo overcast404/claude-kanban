@@ -19,7 +19,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
   const [useWorktree, setUseWorktree] = useState(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const isReply = quoteTarget?.type === 'ai_review' || quoteTarget?.type === 'ai_decision';
+  const isReply = quoteTarget?.type === 'ai_review' || quoteTarget?.type === 'ai_decision' || quoteTarget?.type === 'ai_execution';
 
   const filteredProjects = projects.filter(p =>
     p.name.toLowerCase().includes(mentionFilter.toLowerCase())

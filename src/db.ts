@@ -96,4 +96,59 @@ function initSchema(db: Database.Database): void {
   try { db.exec(`ALTER TABLE tasks ADD COLUMN initial_commit TEXT`); } catch { /* column exists */ }
   try { db.exec(`ALTER TABLE chat_messages ADD COLUMN checkpoint_commit TEXT`); } catch { /* column exists */ }
   try { db.exec(`ALTER TABLE tasks ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1`); } catch { /* column exists */ }
+
+  ensureStoppedStatusAllowed(db);
+}
+
+function ensureStoppedStatusAllowed(db: Database.Database): void {
+  const table = db.prepare(`
+    SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'
+  `).get() as { sql: string } | undefined;
+
+  if (!table?.sql || table.sql.includes("'stopped'")) return;
+
+  const foreignKeysEnabled = (db.pragma('foreign_keys', { simple: true }) as number) === 1;
+  db.pragma('foreign_keys = OFF');
+
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE tasks_new (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','deciding','reviewing','done','stopped')),
+          session_id TEXT,
+          summary TEXT,
+          checkpoint_commit TEXT,
+          initial_commit TEXT,
+          use_worktree INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+
+        INSERT INTO tasks_new (
+          id, project_id, title, description, status, session_id, summary,
+          checkpoint_commit, initial_commit, use_worktree, created_at, updated_at
+        )
+        SELECT
+          id, project_id, title, description,
+          CASE
+            WHEN status IN ('pending','running','deciding','reviewing','done','stopped') THEN status
+            ELSE 'pending'
+          END,
+          session_id, summary, checkpoint_commit, initial_commit, use_worktree, created_at, updated_at
+        FROM tasks;
+
+        DROP TABLE tasks;
+        ALTER TABLE tasks_new RENAME TO tasks;
+        CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+        CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+      `);
+    })();
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeysEnabled ? 'ON' : 'OFF'}`);
+  }
 }

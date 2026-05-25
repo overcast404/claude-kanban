@@ -7,7 +7,7 @@ import os from 'os';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import { Task, TaskCreateInput, Decision } from '../types';
-import { startTask, resumeSession, stopSessionManager, getRunningCount, cleanupWorktree, findWorktreeByTask } from '../services/session-manager';
+import { startTask, resumeSession, stopSessionManager, getRunningCount, cleanupWorktree, findWorktreeByTask, isSessionActive } from '../services/session-manager';
 
 function getDataDir(): string {
   return process.env.CLAUDE_KANBAN_DATA_DIR || path.join(os.homedir(), '.claude-kanban');
@@ -345,14 +345,19 @@ tasksRouter.post('/:id/start', async (req: Request, res: Response) => {
   }
 });
 
-// Stop task (kill claude process)
-tasksRouter.post('/:id/stop', (req: Request, res: Response) => {
+// Stop task (ask Claude to save and exit gracefully)
+tasksRouter.post('/:id/stop', async (req: Request, res: Response) => {
   try {
-    stopSessionManager(req.params.id);
     const db = getDb();
+    const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
+    if (!existing) return res.status(404).json({ error: 'Task not found' });
+    if (existing.status !== 'running') return res.status(400).json({ error: 'Only running tasks can be stopped' });
+
+    const stopPromise = stopSessionManager(req.params.id);
     db.prepare(`UPDATE tasks SET status = 'stopped', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
     broadcast({ type: 'task_updated', payload: task });
+    await stopPromise;
     res.json(task);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
@@ -367,7 +372,9 @@ tasksRouter.post('/:id/resume', async (req: Request, res: Response) => {
     const db = getDb();
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
     if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.status !== 'stopped') return res.status(400).json({ error: 'Only stopped tasks can be resumed' });
     if (!task.session_id) return res.status(400).json({ error: 'Task has no session to resume' });
+    if (isSessionActive(req.params.id)) return res.status(409).json({ error: 'Task is still stopping; try again shortly' });
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
     if (!project) return res.status(404).json({ error: 'Project not found' });

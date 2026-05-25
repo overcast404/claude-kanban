@@ -4,6 +4,8 @@ import { ChatBubble } from './ChatBubble';
 
 interface Props {
   messages: ChatMessage[];
+  runningTaskIds: Set<string>;
+  stoppedTaskIds: Set<string>;
   doneTaskIds: Set<string>;
   reviewingTaskIds: Set<string>;
   taskWorktrees: Record<string, string | null | undefined>;
@@ -13,13 +15,14 @@ interface Props {
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
+  onStopTask: (msg: ChatMessage) => void;
   onQuoteReply: (msg: ChatMessage) => void;
   onRewind: (msg: ChatMessage) => void;
   onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
   onThreadOpen: (taskId: string) => void;
 }
 
-export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, taskWorktrees, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
+export function ChatMessageList({ messages, runningTaskIds, stoppedTaskIds, doneTaskIds, reviewingTaskIds, taskWorktrees, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
@@ -30,6 +33,20 @@ export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, taskW
     const lastPerTask = new Map<string, string>(); // taskId -> messageId
     for (const msg of messages) {
       if (msg.type === 'ai_review') {
+        lastPerTask.set(msg.taskId, msg.id);
+      }
+    }
+    for (const id of lastPerTask.values()) {
+      ids.add(id);
+    }
+    return ids;
+  }, [messages]);
+
+  const latestExecutionMsgIds = useMemo(() => {
+    const ids = new Set<string>();
+    const lastPerTask = new Map<string, string>();
+    for (const msg of messages) {
+      if (msg.type === 'ai_execution') {
         lastPerTask.set(msg.taskId, msg.id);
       }
     }
@@ -75,7 +92,7 @@ export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, taskW
   }
 
   return (
-    <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-3 flex flex-col gap-2 bg-gray-50/50">
+    <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden py-3 flex flex-col gap-2 bg-gray-50/50">
       {loadingMore && (
         <div className="text-center text-[10px] text-warm-text-secondary py-1">加载中...</div>
       )}
@@ -84,12 +101,16 @@ export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, taskW
           key={msg.id}
           message={msg}
           getQuotedMessage={getQuotedMessage}
+          isTaskRunning={runningTaskIds.has(msg.taskId)}
+          isTaskStopped={stoppedTaskIds.has(msg.taskId)}
           isTaskDone={doneTaskIds.has(msg.taskId)}
           isLatestReview={reviewingTaskIds.has(msg.taskId) && latestReviewMsgIds.has(msg.id)}
+          isLatestExecution={latestExecutionMsgIds.has(msg.id)}
           worktree={msg.type !== 'user_message' && msg.type !== 'system' ? taskWorktrees[msg.taskId] : undefined}
           onDecisionClick={onDecisionClick}
           onApprove={onApprove}
           onReject={onReject}
+          onStopTask={onStopTask}
           onQuoteReply={onQuoteReply}
           onRewind={onRewind}
           onFork={onFork}

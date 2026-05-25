@@ -6,6 +6,7 @@ interface ProjectWithCounts extends Project {
   count_running: number;
   count_deciding: number;
   count_reviewing: number;
+  count_stopped: number;
 }
 
 interface Props {
@@ -23,7 +24,7 @@ export function ChatSidebar({ projects, onProjectClick, gitStatuses }: Props) {
       </div>
       <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-1">
         {projects.map(p => {
-          const activeCount = p.count_running + p.count_deciding + p.count_reviewing;
+          const activeCount = p.count_running + p.count_deciding + p.count_reviewing + p.count_stopped;
           const hasActive = activeCount > 0;
           const gitStatus = gitStatuses[p.id];
           return (

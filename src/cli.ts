@@ -90,6 +90,20 @@ function isKanbanProcess(pid: number): boolean {
   }
 }
 
+function processListensOnPort(pid: number, port: number): boolean {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8', timeout: 3000 });
+      return out.split('\n').some(line => line.includes('LISTENING') && line.trim().endsWith(String(pid)));
+    }
+
+    const out = execSync(`lsof -Pan -p ${pid} -iTCP -sTCP:LISTEN`, { encoding: 'utf-8', timeout: 3000 });
+    return out.split('\n').some(line => line.includes(`:${port} `) || line.includes(`:${port} (LISTEN)`));
+  } catch {
+    return false;
+  }
+}
+
 async function killPortProcess(port: number) {
   const pid = findPortPid(port);
   if (!pid || pid === process.pid) return;
@@ -98,7 +112,7 @@ async function killPortProcess(port: number) {
   await sleep(500);
 }
 
-async function killExistingProcess(pidFile: string) {
+async function killExistingProcess(pidFile: string, expectedPort: number) {
   try {
     const pidStr = fs.readFileSync(pidFile, 'utf-8').trim();
     const pid = parseInt(pidStr, 10);
@@ -122,6 +136,12 @@ async function killExistingProcess(pidFile: string) {
       return;
     }
 
+    if (!processListensOnPort(pid, expectedPort)) {
+      console.log(`PID ${pid} is not listening on port ${expectedPort}, keeping it running`);
+      try { fs.unlinkSync(pidFile); } catch {}
+      return;
+    }
+
     console.log('Stopping existing instance...');
 
     if (process.platform === 'win32') {
@@ -134,6 +154,14 @@ async function killExistingProcess(pidFile: string) {
   } catch {
     // PID file doesn't exist, process already gone, or kill failed
   }
+}
+
+async function cleanupLegacyPidFile(dataDir: string, port: number, currentPidFile: string) {
+  const legacyPidFile = path.join(dataDir, 'server.pid');
+  if (legacyPidFile === currentPidFile || !fs.existsSync(legacyPidFile)) return;
+
+  await killExistingProcess(legacyPidFile, port);
+  try { fs.unlinkSync(legacyPidFile); } catch {}
 }
 
 function writePidFile(pidFile: string) {
@@ -157,8 +185,9 @@ async function main() {
   const staticDir = path.join(__dirname, 'public');
   const openBrowser = argv.open !== false;
 
-  const pidFile = path.join(dataDir, 'server.pid');
-  await killExistingProcess(pidFile);
+  const pidFile = path.join(dataDir, `server-${port}.pid`);
+  await killExistingProcess(pidFile, port);
+  await cleanupLegacyPidFile(dataDir, port, pidFile);
 
   let server: http.Server;
   let url: string;

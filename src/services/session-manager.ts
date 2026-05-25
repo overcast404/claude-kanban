@@ -14,6 +14,21 @@ const WORKTREE_PREFIX = 'kanban-';
 
 const runningProcesses = new Map<string, ChildProcess>();
 const recentOutput = new Map<string, string>();
+const stopRequests = new Map<string, Promise<boolean>>();
+
+interface DecisionOption {
+  label: string;
+  description?: string;
+}
+
+interface ParsedRunOutput {
+  resultText: string | null;
+  lastAssistantText: string | null;
+}
+
+type ExitOutcome =
+  | { kind: 'reviewing' }
+  | { kind: 'needs_decision'; question: string; options: DecisionOption[]; context: string };
 
 export function getRecentOutput(taskId: string): string {
   return recentOutput.get(taskId) || '';
@@ -124,20 +139,73 @@ export function getRunningCount(): number {
 
 const GRACEFUL_SHUTDOWN_MS = 5000;
 
-export function stopSessionManager(taskId: string): void {
+export function isSessionActive(taskId: string): boolean {
+  return runningProcesses.has(taskId);
+}
+
+function isStopRequested(taskId: string): boolean {
+  return stopRequests.has(taskId);
+}
+
+export function stopSessionManager(taskId: string): Promise<boolean> {
+  const existingStop = stopRequests.get(taskId);
+  if (existingStop) return existingStop;
+
   const proc = runningProcesses.get(taskId);
-  if (!proc) return;
+  if (!proc) return Promise.resolve(false);
 
-  proc.kill('SIGINT');
+  let forceKillTimer: NodeJS.Timeout | null = null;
+  let forceCleanupTimer: NodeJS.Timeout | null = null;
 
-  const forceKillTimer = setTimeout(() => {
-    if (runningProcesses.has(taskId)) {
-      console.log(`[SessionManager] Task ${taskId} did not exit gracefully after ${GRACEFUL_SHUTDOWN_MS}ms, sending SIGKILL`);
-      proc.kill('SIGKILL');
+  const stopPromise = new Promise<boolean>((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      if (forceCleanupTimer) clearTimeout(forceCleanupTimer);
+      proc.removeListener('close', cleanup);
+      proc.removeListener('exit', cleanup);
+      proc.removeListener('error', cleanup);
+      resolve(true);
+    };
+
+    proc.once('close', cleanup);
+    proc.once('exit', cleanup);
+    proc.once('error', cleanup);
+
+    try {
+      const signaled = proc.kill('SIGINT');
+      if (!signaled) {
+        console.log(`[SessionManager] SIGINT was not delivered for task ${taskId}; waiting for process cleanup`);
+      }
+    } catch (e) {
+      console.error(`[SessionManager] Failed to send SIGINT for task ${taskId}:`, (e as Error).message);
+      cleanup();
+      return;
     }
-  }, GRACEFUL_SHUTDOWN_MS);
 
-  proc.once('exit', () => clearTimeout(forceKillTimer));
+    forceKillTimer = setTimeout(() => {
+      if (runningProcesses.get(taskId) === proc) {
+        console.log(`[SessionManager] Task ${taskId} did not exit gracefully after ${GRACEFUL_SHUTDOWN_MS}ms, sending SIGKILL`);
+        proc.kill('SIGKILL');
+      }
+
+      forceCleanupTimer = setTimeout(() => {
+        if (runningProcesses.get(taskId) === proc) {
+          runningProcesses.delete(taskId);
+          cleanup();
+        }
+      }, 1000);
+    }, GRACEFUL_SHUTDOWN_MS);
+  });
+
+  stopRequests.set(taskId, stopPromise);
+  stopPromise.finally(() => {
+    if (stopRequests.get(taskId) === stopPromise) stopRequests.delete(taskId);
+  }).catch(() => {});
+
+  return stopPromise;
 }
 
 export async function startTask(taskId: string): Promise<void> {
@@ -153,6 +221,7 @@ export async function startTask(taskId: string): Promise<void> {
   const db = getDb();
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as Task | undefined;
   if (!task) throw new Error('Task not found');
+  if (runningProcesses.has(taskId)) throw new Error('Task is already running');
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as Project | undefined;
   if (!project) throw new Error('Project not found');
@@ -280,7 +349,7 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     recentOutput.delete(task.id);
 
     const currentTask = db.prepare('SELECT status FROM tasks WHERE id = ?').get(task.id) as { status: string } | undefined;
-    if (currentTask?.status === 'stopped') {
+    if (currentTask?.status === 'stopped' || isStopRequested(task.id)) {
       console.log(`[SessionManager] Task ${task.id} was stopped by user, skipping completion check`);
     } else {
       checkAndHandleCompletion(task.id, stdout).catch(console.error);
@@ -321,12 +390,196 @@ function extractSummary(stdout: string): string {
   return '[无法解析 Claude 输出，请查看会话历史]';
 }
 
+function parseRunOutput(stdout: string): ParsedRunOutput {
+  let resultText: string | null = null;
+  let lastAssistantText: string | null = null;
+  let activeTextBlock: string | null = null;
+
+  function captureText(text: unknown): void {
+    if (typeof text !== 'string') return;
+    const trimmed = text.trim();
+    if (trimmed) lastAssistantText = trimmed;
+  }
+
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue;
+
+    try {
+      const obj = JSON.parse(line) as any;
+
+      if (obj.type === 'stream_event') {
+        const ev = obj.event;
+        if (!ev) continue;
+
+        if (ev.type === 'content_block_start') {
+          if (activeTextBlock !== null) captureText(activeTextBlock);
+          activeTextBlock = ev.content_block?.type === 'text' ? '' : null;
+          captureText(ev.content_block?.text);
+        } else if (ev.type === 'content_block_delta') {
+          const delta = ev.delta;
+          if (activeTextBlock !== null && delta?.type === 'text_delta' && typeof delta.text === 'string') {
+            activeTextBlock += delta.text;
+          }
+        } else if (ev.type === 'content_block_stop') {
+          if (activeTextBlock !== null) captureText(activeTextBlock);
+          activeTextBlock = null;
+        }
+        continue;
+      }
+
+      if (obj.type === 'assistant') {
+        const contents = obj.message?.content || [];
+        for (const c of contents) {
+          if (c?.type === 'text') captureText(c.text);
+        }
+        continue;
+      }
+
+      if (obj.type === 'result' && typeof obj.result === 'string') {
+        resultText = obj.result.trim();
+      }
+    } catch {
+      // Ignore non-JSON warnings emitted alongside stream-json output.
+    }
+  }
+
+  if (activeTextBlock !== null) captureText(activeTextBlock);
+  return { resultText, lastAssistantText };
+}
+
+function normalizeText(text: string): string {
+  return text.replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+}
+
+function extractQuestionText(text: string): string {
+  const chunks = text
+    .split(/\n{2,}/)
+    .map(chunk => chunk.trim())
+    .filter(Boolean);
+
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    if (looksLikeDecisionRequest(chunks[i], false)) return chunks[i];
+  }
+
+  return text.trim();
+}
+
+function extractDecisionOptions(text: string): DecisionOption[] {
+  const options: DecisionOption[] = [];
+  const seen = new Set<string>();
+
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(?:[-*]\s*)?(?:\d+[\).、]|[A-Da-d][\).、]|方案\s*[A-Da-d一二三四五六]?[:：、.]?|选项\s*[A-Da-d一二三四五六]?[:：、.]?)\s*(.+)$/);
+    if (!match) continue;
+
+    const label = match[1].trim().replace(/\s+/g, ' ');
+    if (label.length < 1 || label.length > 120 || seen.has(label)) continue;
+
+    seen.add(label);
+    options.push({ label });
+  }
+
+  if (options.length >= 2 && options.length <= 8) return options;
+
+  if (/(是否|要不要|能否|可否|是否需要|do you want|would you like|should i)/i.test(text)) {
+    return [{ label: '是' }, { label: '否' }];
+  }
+
+  return [];
+}
+
+function looksCompletionLike(text: string): boolean {
+  return [
+    /(^|\s)(done|completed|finished|ready for review|summary)\b/i,
+    /(已完成|完成了|任务完成|可以验收|请验收|测试通过|构建通过|实现完成|修改完成|处理完毕)/,
+  ].some(pattern => pattern.test(text));
+}
+
+function looksLikeReviewConfirmation(text: string): boolean {
+  return [
+    /(请确认|请检查|是否).{0,30}(验收|满意|通过|符合|完成|可以)/,
+    /(please\s+(review|verify|confirm)|ready for review)/i,
+  ].some(pattern => pattern.test(text));
+}
+
+function looksLikeDecisionRequest(text: string, suppressCompletion = true): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+
+  const hasQuestionMark = /[?？]/.test(normalized);
+  const options = extractDecisionOptions(normalized);
+  const hasOptions = options.length >= 2;
+  const hasExplicitRequest = [
+    /(请选择|请确认|请决定|请提供|请补充|请回复|请告诉我|需要你|麻烦你|等待你)/,
+    /(please\s+(choose|confirm|decide|provide|select|reply)|waiting for you)/i,
+  ].some(pattern => pattern.test(normalized));
+  const hasDecisionTopic = [
+    /(选择|确认|决定|提供|补充|回复|输入|采用哪个|选哪个|是否|要不要|能否|可否)/,
+    /(choose|confirm|decide|provide|select|which|should i|do you want|would you like)/i,
+  ].some(pattern => pattern.test(normalized));
+  const hasContinueSignal = /(继续前|为了继续|下一步|才能继续|awaiting|before continuing|to continue)/i.test(normalized);
+
+  if (suppressCompletion && looksCompletionLike(normalized) && !hasOptions && !hasContinueSignal && looksLikeReviewConfirmation(normalized)) {
+    return false;
+  }
+
+  if (suppressCompletion && looksCompletionLike(normalized) && !hasExplicitRequest && !hasContinueSignal) {
+    return false;
+  }
+
+  return (hasOptions && (hasExplicitRequest || hasQuestionMark || hasContinueSignal))
+    || (hasQuestionMark && (hasExplicitRequest || hasDecisionTopic))
+    || (hasContinueSignal && (hasExplicitRequest || hasDecisionTopic));
+}
+
+function classifyExitOutcome(stdout: string): ExitOutcome {
+  const parsed = parseRunOutput(stdout);
+  const candidate = parsed.resultText || parsed.lastAssistantText || '';
+  const context = normalizeText(candidate).slice(-4000);
+
+  if (!looksLikeDecisionRequest(context)) return { kind: 'reviewing' };
+
+  const question = extractQuestionText(context).slice(-2000);
+  return {
+    kind: 'needs_decision',
+    question,
+    options: extractDecisionOptions(question),
+    context,
+  };
+}
+
+function createFallbackDecision(taskId: string, outcome: Extract<ExitOutcome, { kind: 'needs_decision' }>): void {
+  const db = getDb();
+  db.prepare(`INSERT INTO decisions (id, task_id, context, question, options)
+    VALUES (?, ?, ?, ?, ?)`).run(
+    uuid(),
+    taskId,
+    outcome.context,
+    outcome.question,
+    JSON.stringify(outcome.options)
+  );
+
+  db.prepare(`UPDATE tasks SET status = 'deciding', updated_at = datetime('now') WHERE id = ?`).run(taskId);
+
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  const decision = db.prepare('SELECT * FROM decisions WHERE task_id = ? AND answer IS NULL ORDER BY created_at DESC LIMIT 1').get(taskId);
+  broadcast({ type: 'decision_created', payload: { task, decision } });
+}
+
 async function checkAndHandleCompletion(taskId: string, stdout: string): Promise<void> {
   const db = getDb();
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as Task | undefined;
   if (!task) return;
 
   if (task.status === 'deciding' || task.status === 'reviewing' || task.status === 'done' || task.status === 'pending' || task.status === 'stopped') return;
+
+  const outcome = classifyExitOutcome(stdout);
+  if (outcome.kind === 'needs_decision') {
+    console.log(`[SessionManager] Task ${taskId} exited with an unstructured question — marking as deciding`);
+    createFallbackDecision(taskId, outcome);
+    return;
+  }
 
   const summary = extractSummary(stdout);
 
@@ -358,6 +611,7 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
   const db = getDb();
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as Task | undefined;
   if (!task) throw new Error('Task not found');
+  if (runningProcesses.has(taskId)) throw new Error('Task is already running');
 
   const hooksDir = path.join(getDataDir(), 'hooks');
   if (!fs.existsSync(hooksDir)) fs.mkdirSync(hooksDir, { recursive: true });
@@ -448,7 +702,7 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     recentOutput.delete(taskId);
 
     const currentTask = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string } | undefined;
-    if (currentTask?.status === 'stopped') {
+    if (currentTask?.status === 'stopped' || isStopRequested(taskId)) {
       console.log(`[SessionManager] Task ${taskId} was stopped by user during resume, skipping completion check`);
     } else {
       checkAndHandleCompletion(taskId, resumeStdout).catch(console.error);
