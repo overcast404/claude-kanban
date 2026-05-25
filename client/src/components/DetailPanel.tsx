@@ -209,6 +209,12 @@ export function DetailPanel({ task, projectName, logs, isMobile, onClose, onReje
           <div className="flex items-center gap-2 text-[11px] text-warm-text-secondary">
             <span className="inline-flex items-center gap-0.5"><Icon name="folder" size={12} /> {projectName}</span>
             <span className="inline-flex items-center gap-0.5"><Icon name={STATUS_ICON[task.status]} size={13} /> {STATUS_LABEL[task.status]}</span>
+            {task.status === 'running' && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] bg-gray-100 px-1.5 py-0.5 rounded-full">
+                <Icon name="git-branch" size={11} />
+                {task._worktree || '本地'}
+              </span>
+            )}
           </div>
         </div>
 

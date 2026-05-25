@@ -18,6 +18,7 @@ export interface Task {
   checkpoint_commit: string | null;
   initial_commit: string | null;
   use_worktree: boolean;
+  _worktree?: string | null;
   created_at: string;
   updated_at: string;
 }

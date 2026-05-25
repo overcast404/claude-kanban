@@ -6,6 +6,7 @@ interface Props {
   messages: ChatMessage[];
   doneTaskIds: Set<string>;
   reviewingTaskIds: Set<string>;
+  taskWorktrees: Record<string, string | null | undefined>;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -18,7 +19,7 @@ interface Props {
   onThreadOpen: (taskId: string) => void;
 }
 
-export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
+export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, taskWorktrees, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
@@ -85,6 +86,7 @@ export function ChatMessageList({ messages, doneTaskIds, reviewingTaskIds, hasMo
           getQuotedMessage={getQuotedMessage}
           isTaskDone={doneTaskIds.has(msg.taskId)}
           isLatestReview={reviewingTaskIds.has(msg.taskId) && latestReviewMsgIds.has(msg.id)}
+          worktree={msg.type !== 'user_message' && msg.type !== 'system' ? taskWorktrees[msg.taskId] : undefined}
           onDecisionClick={onDecisionClick}
           onApprove={onApprove}
           onReject={onReject}
