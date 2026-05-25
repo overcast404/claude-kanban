@@ -76,15 +76,15 @@ tasksRouter.post('/', (req: Request, res: Response) => {
   const { projectId } = req.query;
   if (!projectId) return res.status(400).json({ error: 'projectId query required' });
 
-  const { title, description }: TaskCreateInput = req.body;
+  const { title, description, use_worktree }: TaskCreateInput = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
 
   const db = getDb();
   const id = uuid();
   db.prepare(`
-    INSERT INTO tasks (id, project_id, title, description)
-    VALUES (?, ?, ?, ?)
-  `).run(id, projectId, title, description || '');
+    INSERT INTO tasks (id, project_id, title, description, use_worktree)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, projectId, title, description || '', use_worktree !== false ? 1 : 0);
 
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
   broadcast({ type: 'task_created', payload: task });
@@ -265,9 +265,9 @@ tasksRouter.post('/:id/fork', (req: Request, res: Response) => {
   // Create new task
   const newTaskId = uuid();
   db.prepare(`
-    INSERT INTO tasks (id, project_id, title, description, status, created_at)
-    VALUES (?, ?, ?, ?, 'pending', datetime('now'))
-  `).run(newTaskId, task.project_id, task.title, `${userMsg.content}（从任务分叉）`);
+    INSERT INTO tasks (id, project_id, title, description, status, use_worktree, created_at)
+    VALUES (?, ?, ?, ?, 'pending', ?, datetime('now'))
+  `).run(newTaskId, task.project_id, task.title, `${userMsg.content}（从任务分叉）`, task.use_worktree ? 1 : 0);
 
   // Copy chat messages up to and including the user_message
   const messages = db.prepare(`

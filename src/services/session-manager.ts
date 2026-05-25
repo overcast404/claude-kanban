@@ -160,7 +160,7 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
   writeProtocolFile(protocolPath);
   writeMcpConfig(mcpConfigPath);
 
-  const useWorktree = isGitRepo(workingDir);
+  const useWorktree = !!task.use_worktree && isGitRepo(workingDir);
   if (useWorktree) {
     cleanupWorktree(workingDir, task.id);
   }

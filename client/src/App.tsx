@@ -528,7 +528,7 @@ export default function App() {
   };
 
   // === Chat: user action handlers ===
-  const handleChatSend = useCallback(async (text: string, quoteMessageId?: string) => {
+  const handleChatSend = useCallback(async (text: string, quoteMessageId?: string, useWorktree?: boolean) => {
     // If replying to an AI bubble (review or decision), continue the existing task
     if (quoteMessageId) {
       const quotedMsg = chatMessages.find(m => m.id === quoteMessageId);
@@ -597,7 +597,7 @@ export default function App() {
     };
 
     try {
-      const task = await createTask(project.id, { title: description.slice(0, 80), description });
+      const task = await createTask(project.id, { title: description.slice(0, 80), description, use_worktree: useWorktree });
       userMsg.taskId = task.id;
       setChatMessages(prev => [...prev, userMsg]);
       lastTaskStatus.current[task.id] = 'pending';
