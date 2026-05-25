@@ -17,6 +17,7 @@ export interface Task {
   summary: string | null;
   checkpoint_commit: string | null;
   initial_commit: string | null;
+  use_worktree: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -35,6 +36,7 @@ export interface Decision {
 export interface TaskCreateInput {
   title: string;
   description: string;
+  use_worktree?: boolean;
 }
 
 export interface ProjectCreateInput {

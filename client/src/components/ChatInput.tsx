@@ -7,7 +7,7 @@ interface Props {
   projects: { id: string; name: string }[];
   quoteTarget: ChatMessage | null;
   onCancelQuote: () => void;
-  onSend: (text: string, quoteMessageId?: string) => void;
+  onSend: (text: string, quoteMessageId?: string, useWorktree?: boolean) => void;
   mentionPrefill: { name: string; n: number } | null;
 }
 
@@ -16,7 +16,10 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
   const [showMention, setShowMention] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [useWorktree, setUseWorktree] = useState(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const isReply = quoteTarget?.type === 'ai_review' || quoteTarget?.type === 'ai_decision';
 
   const filteredProjects = projects.filter(p =>
     p.name.toLowerCase().includes(mentionFilter.toLowerCase())
@@ -100,7 +103,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (text.trim()) {
-        onSend(text.trim(), quoteTarget?.id);
+        onSend(text.trim(), quoteTarget?.id, useWorktree);
         setText('');
       }
     }
@@ -108,7 +111,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
 
   const handleSendClick = () => {
     if (text.trim()) {
-      onSend(text.trim(), quoteTarget?.id);
+      onSend(text.trim(), quoteTarget?.id, useWorktree);
       setText('');
     }
   };
@@ -171,6 +174,27 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
           <Icon name="send" size={18} />
         </button>
       </div>
+
+      {/* Worktree toggle — only for new tasks, not AI replies */}
+      {!isReply && (
+        <div className="flex items-center gap-2 mt-1.5 px-1">
+          <span className="text-[10px] text-warm-text-secondary shrink-0">运行环境</span>
+          <div className="flex rounded-md border border-warm-border overflow-hidden text-[11px]">
+            <button
+              onClick={() => setUseWorktree(false)}
+              className={`px-2.5 py-0.5 transition-colors ${!useWorktree ? 'bg-warm-brown text-white' : 'bg-white text-warm-text-secondary hover:bg-gray-50'}`}
+            >
+              本地
+            </button>
+            <button
+              onClick={() => setUseWorktree(true)}
+              className={`px-2.5 py-0.5 transition-colors ${useWorktree ? 'bg-warm-brown text-white' : 'bg-white text-warm-text-secondary hover:bg-gray-50'}`}
+            >
+              新worktree
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="text-[10px] text-warm-text-secondary mt-1.5 px-1">
         💡 @成员名 创建新任务 | Shift+Enter 换行 | 右键/悬停消息引用回复 | 点击 AI 消息按钮决策

@@ -11,6 +11,7 @@ interface Props {
 export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
   const [description, setDescription] = useState('');
+  const [useWorktree, setUseWorktree] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const handleCreate = async (start: boolean) => {
@@ -20,6 +21,7 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
       const task = await createTask(projectId, {
         title: description.trim().slice(0, 80),
         description: description.trim(),
+        use_worktree: useWorktree,
       });
       if (start) await startTask(task.id);
       onCreated();
@@ -55,6 +57,23 @@ export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
             rows={3}
             autoFocus
           />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-warm-text-secondary mb-1">运行环境</label>
+          <div className="flex rounded-md border border-warm-border overflow-hidden text-[12px] w-fit">
+            <button
+              onClick={() => setUseWorktree(false)}
+              className={`px-3 py-1 transition-colors ${!useWorktree ? 'bg-warm-brown text-white' : 'bg-white text-warm-text-secondary hover:bg-gray-50'}`}
+            >
+              本地
+            </button>
+            <button
+              onClick={() => setUseWorktree(true)}
+              className={`px-3 py-1 transition-colors ${useWorktree ? 'bg-warm-brown text-white' : 'bg-white text-warm-text-secondary hover:bg-gray-50'}`}
+            >
+              新worktree
+            </button>
+          </div>
         </div>
         <div className="flex justify-end gap-2 pt-3">
           <button

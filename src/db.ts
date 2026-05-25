@@ -50,6 +50,7 @@ function initSchema(db: Database.Database): void {
       summary TEXT,
       checkpoint_commit TEXT,
       initial_commit TEXT,
+      use_worktree INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -94,4 +95,5 @@ function initSchema(db: Database.Database): void {
   try { db.exec(`ALTER TABLE tasks ADD COLUMN checkpoint_commit TEXT`); } catch { /* column exists */ }
   try { db.exec(`ALTER TABLE tasks ADD COLUMN initial_commit TEXT`); } catch { /* column exists */ }
   try { db.exec(`ALTER TABLE chat_messages ADD COLUMN checkpoint_commit TEXT`); } catch { /* column exists */ }
+  try { db.exec(`ALTER TABLE tasks ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1`); } catch { /* column exists */ }
 }
