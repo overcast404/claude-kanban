@@ -118,6 +118,16 @@ export default function App() {
     return ids;
   }, [tasks]);
 
+  const taskWorktrees = useMemo(() => {
+    const map: Record<string, string | null | undefined> = {};
+    for (const taskList of Object.values(tasks)) {
+      for (const t of taskList) {
+        map[t.id] = t._worktree;
+      }
+    }
+    return map;
+  }, [tasks]);
+
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -871,6 +881,7 @@ export default function App() {
                 messages={chatMessages}
                 doneTaskIds={doneTaskIds}
                 reviewingTaskIds={reviewingTaskIds}
+                taskWorktrees={taskWorktrees}
                 quoteTarget={quoteTarget}
                 onCancelQuote={handleCancelQuote}
                 onSend={handleChatSend}

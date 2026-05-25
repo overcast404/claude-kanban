@@ -17,6 +17,7 @@ interface Props {
   messages: ChatMessage[];
   doneTaskIds: Set<string>;
   reviewingTaskIds: Set<string>;
+  taskWorktrees: Record<string, string | null | undefined>;
   quoteTarget: ChatMessage | null;
   onCancelQuote: () => void;
   onSend: (text: string, quoteMessageId?: string) => void;
@@ -48,6 +49,7 @@ export function ChatPanel(props: Props) {
           messages={props.messages}
           doneTaskIds={props.doneTaskIds}
           reviewingTaskIds={props.reviewingTaskIds}
+          taskWorktrees={props.taskWorktrees}
           hasMore={props.hasMore}
           loadingMore={props.loadingMore}
           onLoadMore={props.onLoadMore}

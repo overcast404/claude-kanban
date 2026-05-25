@@ -17,6 +17,7 @@ export interface Task {
   summary: string | null;
   checkpoint_commit: string | null;
   initial_commit: string | null;
+  _worktree?: string | null;
   created_at: string;
   updated_at: string;
 }

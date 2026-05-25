@@ -39,7 +39,7 @@ function isGitRepo(dir: string): boolean {
   }
 }
 
-function findWorktreeByTask(workingDir: string, taskId: string): { path: string; branch: string } | null {
+export function findWorktreeByTask(workingDir: string, taskId: string): { path: string; branch: string } | null {
   try {
     const output = execSync(`git -C "${workingDir}" worktree list --porcelain`, { stdio: 'pipe' }).toString();
     const blocks = output.split('\n\n');
@@ -275,7 +275,8 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime('now') WHERE id = ?`).run(task.id);
   });
 
-  const task_ = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
+  const task_ = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id) as any;
+  if (useWorktree) task_._worktree = getWorktreeName(task.id);
   broadcast({ type: 'task_updated', payload: task_ });
 }
 

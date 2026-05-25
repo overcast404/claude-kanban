@@ -8,6 +8,7 @@ interface Props {
   getQuotedMessage: (id: string) => ChatMessage | undefined;
   isTaskDone: boolean;
   isLatestReview: boolean;
+  worktree?: string | null;
   onDecisionClick: (msg: ChatMessage, answer: string) => void;
   onApprove: (msg: ChatMessage) => void;
   onReject: (msg: ChatMessage) => void;
@@ -82,7 +83,7 @@ function ForkMenu({ onRewind, onFork, isDone }: { onRewind: () => void; onFork: 
   );
 }
 
-export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestReview, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
+export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestReview, worktree, onDecisionClick, onApprove, onReject, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
   const { type, projectName, content, round } = message;
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState('');
@@ -164,6 +165,12 @@ export function ChatBubble({ message, getQuotedMessage, isTaskDone, isLatestRevi
               isDecision ? 'bg-warm-brown/10 text-warm-brown' : 'bg-amber-50 text-amber-700'
             }`}>
               {statusBadge}
+            </span>
+          )}
+          {worktree !== undefined && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-warm-text-secondary inline-flex items-center gap-0.5">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 3v12 M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M18 9a9 9 0 0 1-9 9"/></svg>
+              {worktree || '本地'}
             </span>
           )}
         </div>

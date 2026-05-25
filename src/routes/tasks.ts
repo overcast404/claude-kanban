@@ -7,7 +7,7 @@ import os from 'os';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import { Task, TaskCreateInput, Decision } from '../types';
-import { startTask, resumeSession, stopSessionManager, getRunningCount, cleanupWorktree } from '../services/session-manager';
+import { startTask, resumeSession, stopSessionManager, getRunningCount, cleanupWorktree, findWorktreeByTask } from '../services/session-manager';
 
 function getDataDir(): string {
   return process.env.CLAUDE_KANBAN_DATA_DIR || path.join(os.homedir(), '.claude-kanban');
@@ -15,16 +15,28 @@ function getDataDir(): string {
 
 export const tasksRouter = Router();
 
+function enrichWorktree(task: Task, workingDir: string): Task {
+  if (task.status !== 'running') return task;
+  const wt = findWorktreeByTask(workingDir, task.id);
+  return { ...task, _worktree: wt ? wt.branch : null };
+}
+
 // List tasks for a project (query: ?projectId=...)
 tasksRouter.get('/', (req: Request, res: Response) => {
   const db = getDb();
   const { projectId } = req.query;
   if (!projectId) return res.status(400).json({ error: 'projectId query required' });
 
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId as string) as any;
   const tasks = db.prepare(`
     SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at DESC
-  `).all(projectId as string);
-  res.json(tasks);
+  `).all(projectId as string) as Task[];
+
+  if (project) {
+    res.json(tasks.map(t => enrichWorktree(t, project.working_dir)));
+  } else {
+    res.json(tasks);
+  }
 });
 
 // Get system status (must be before /:id routes)
@@ -40,6 +52,8 @@ tasksRouter.get('/:id', (req: Request, res: Response) => {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
   if (!task) return res.status(404).json({ error: 'Task not found' });
 
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
+
   let pendingDecision: Decision | null = null;
   if (task.status === 'deciding') {
     pendingDecision = db.prepare(
@@ -47,7 +61,7 @@ tasksRouter.get('/:id', (req: Request, res: Response) => {
     ).get(task.id) as Decision | null;
   }
 
-  res.json({ task, pendingDecision });
+  res.json({ task: project ? enrichWorktree(task, project.working_dir) : task, pendingDecision });
 });
 
 // Get task output logs (byte-offset based)
