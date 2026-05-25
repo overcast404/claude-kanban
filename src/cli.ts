@@ -76,6 +76,20 @@ function killPid(pid: number) {
   }
 }
 
+function isKanbanProcess(pid: number): boolean {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, { encoding: 'utf-8', timeout: 3000 });
+      return out.toLowerCase().includes('node') || out.toLowerCase().includes('tsx');
+    } else {
+      const out = execSync(`ps -p ${pid} -o args= 2>/dev/null || true`, { encoding: 'utf-8', timeout: 3000 });
+      return out.includes('cli.ts') || out.includes('dist/cli.js');
+    }
+  } catch {
+    return false;
+  }
+}
+
 async function killPortProcess(port: number) {
   const pid = findPortPid(port);
   if (!pid || pid === process.pid) return;
@@ -89,6 +103,24 @@ async function killExistingProcess(pidFile: string) {
     const pidStr = fs.readFileSync(pidFile, 'utf-8').trim();
     const pid = parseInt(pidStr, 10);
     if (!pid || pid === process.pid) return;
+
+    // Verify the PID still belongs to a kanban process before killing.
+    // PID could have been recycled by the OS, pointing to an unrelated process.
+    const running = (() => {
+      try { process.kill(pid, 0); return true; } catch { return false; }
+    })();
+
+    if (!running) {
+      // Process no longer exists — clean up stale PID file
+      try { fs.unlinkSync(pidFile); } catch {}
+      return;
+    }
+
+    if (!isKanbanProcess(pid)) {
+      console.log(`PID ${pid} exists but is not a kanban process (PID recycled), skipping kill`);
+      try { fs.unlinkSync(pidFile); } catch {}
+      return;
+    }
 
     console.log('Stopping existing instance...');
 

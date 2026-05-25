@@ -7,9 +7,9 @@ export default defineConfig({
   base: './',
   server: {
     proxy: {
-      '/api': 'http://localhost:14567',
+      '/api': `http://localhost:${process.env.CLAUDE_KANBAN_PORT || '14567'}`,
       '/ws': {
-        target: 'ws://localhost:14567',
+        target: `ws://localhost:${process.env.CLAUDE_KANBAN_PORT || '14567'}`,
         ws: true,
       },
     },

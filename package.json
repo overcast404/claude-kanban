@@ -6,7 +6,7 @@
     "ck": "./dist/cli.js"
   },
   "scripts": {
-    "dev": "concurrently \"tsx watch src/cli.ts --dev --no-open\" \"cd client && vite --port 14568\"",
+    "dev": "CLAUDE_KANBAN_PORT=14566 concurrently \"tsx watch src/cli.ts --dev --no-open\" \"cd client && vite --port 14568\"",
     "build": "tsc && cd client && vite build",
     "start": "node dist/cli.js"
   },

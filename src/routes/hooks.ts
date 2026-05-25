@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
+import { getRecentOutput } from '../services/session-manager';
 import { v4 as uuid } from 'uuid';
 
 export const hooksRouter = Router();
@@ -20,11 +21,14 @@ hooksRouter.post('/:taskId', (req: Request, res: Response) => {
     const questions = hookBody.tool_input?.questions || [];
     const questionText = questions[0]?.question || '需要决策';
     const options = questions[0]?.options || [];
+    const hookContext = hookBody.additional_context || hookBody.transcript_snippet || '';
+    const recentStdout = getRecentOutput(taskId);
+    const context = recentStdout || hookContext;
 
     db.prepare(`INSERT INTO decisions (id, task_id, context, question, options)
       VALUES (?, ?, ?, ?, ?)`).run(
       uuid(), taskId,
-      hookBody.additional_context || hookBody.transcript_snippet || '',
+      context,
       questionText,
       JSON.stringify(options)
     );
