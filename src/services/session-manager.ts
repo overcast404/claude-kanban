@@ -13,6 +13,11 @@ function getManagerPort(): number {
 const WORKTREE_PREFIX = 'kanban-';
 
 const runningProcesses = new Map<string, ChildProcess>();
+const recentOutput = new Map<string, string>();
+
+export function getRecentOutput(taskId: string): string {
+  return recentOutput.get(taskId) || '';
+}
 
 function getDataDir(): string {
   return process.env.CLAUDE_KANBAN_DATA_DIR || path.join(os.homedir(), '.claude-kanban');
@@ -117,12 +122,22 @@ export function getRunningCount(): number {
   return runningProcesses.size;
 }
 
+const GRACEFUL_SHUTDOWN_MS = 5000;
+
 export function stopSessionManager(taskId: string): void {
   const proc = runningProcesses.get(taskId);
-  if (proc) {
-    proc.kill('SIGINT');
-    runningProcesses.delete(taskId);
-  }
+  if (!proc) return;
+
+  proc.kill('SIGINT');
+
+  const forceKillTimer = setTimeout(() => {
+    if (runningProcesses.has(taskId)) {
+      console.log(`[SessionManager] Task ${taskId} did not exit gracefully after ${GRACEFUL_SHUTDOWN_MS}ms, sending SIGKILL`);
+      proc.kill('SIGKILL');
+    }
+  }, GRACEFUL_SHUTDOWN_MS);
+
+  proc.once('exit', () => clearTimeout(forceKillTimer));
 }
 
 export async function startTask(taskId: string): Promise<void> {
@@ -243,6 +258,7 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
   proc.stdout?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
     stdout += text;
+    recentOutput.set(task.id, stdout.slice(-5000));
     pendingChunks.push({ stream: 'stdout', text });
     if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; flushChunks(); }, 100);
   });
@@ -261,8 +277,14 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     flushChunks();
 
     runningProcesses.delete(task.id);
+    recentOutput.delete(task.id);
 
-    checkAndHandleCompletion(task.id, stdout).catch(console.error);
+    const currentTask = db.prepare('SELECT status FROM tasks WHERE id = ?').get(task.id) as { status: string } | undefined;
+    if (currentTask?.status === 'stopped') {
+      console.log(`[SessionManager] Task ${task.id} was stopped by user, skipping completion check`);
+    } else {
+      checkAndHandleCompletion(task.id, stdout).catch(console.error);
+    }
 
     try { fs.unlinkSync(hooksConfigPath); } catch {}
     try { fs.unlinkSync(protocolPath); } catch {}
@@ -406,6 +428,7 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
   proc.stdout?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
     resumeStdout += text;
+    recentOutput.set(taskId, resumeStdout.slice(-5000));
     pendingChunks.push({ stream: 'stdout', text });
     if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; flushChunks(); }, 100);
   });
@@ -421,7 +444,15 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     flushChunks();
     runningProcesses.delete(taskId);
-    checkAndHandleCompletion(taskId, resumeStdout).catch(console.error);
+    recentOutput.delete(taskId);
+
+    const currentTask = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string } | undefined;
+    if (currentTask?.status === 'stopped') {
+      console.log(`[SessionManager] Task ${taskId} was stopped by user during resume, skipping completion check`);
+    } else {
+      checkAndHandleCompletion(taskId, resumeStdout).catch(console.error);
+    }
+
     try { fs.unlinkSync(hooksConfigPath); } catch {}
     try { fs.unlinkSync(protocolPath); } catch {}
     try { fs.unlinkSync(mcpConfigPath); } catch {}
@@ -487,13 +518,17 @@ You are working on a task managed by Claude Kanban. Follow these critical rules:
 - **NEVER** just output text saying you're done. Always call mcp__manager__mark_complete.
 - The summary should concisely describe what was accomplished.
 
+## Stop Protocol
+- You may receive SIGINT (external stop) at any time. When this happens, your session state is automatically saved.
+- The session can be resumed later via --resume, so do not worry about losing work.
+- If you are in the middle of a tool call when stopped, the tool's partial output may be lost. Re-execute if needed after resume.
+
 ## Permission Protocol
 - Permissions are handled automatically. Do not ask for permission approval.
 - If a tool is blocked, report it in your summary instead.
 
 ## Important
-- At the end of EACH turn, either you are asking a question (via AskUserQuestion) OR you are done (via mcp__manager__mark_complete).
-- There is NO third option. Do not stop mid-work without one of these signals.
+- At the end of EACH turn, either you are asking a question (via AskUserQuestion), you are done (via mcp__manager__mark_complete), or you may be stopped externally (SIGINT).
 `;
   fs.writeFileSync(filePath, protocol);
 }

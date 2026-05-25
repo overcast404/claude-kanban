@@ -51,10 +51,8 @@ export const getTaskWithDecision = (taskId: string) =>
   request<{ task: Task; pendingDecision: Decision | null }>(`/tasks/${taskId}`);
 export const stopTask = (taskId: string) =>
   request<Task>(`/tasks/${taskId}/stop`, { method: 'POST' });
-export const continueTask = (taskId: string) =>
-  request<Task>(`/tasks/${taskId}/continue`, { method: 'POST' });
-export const resumeStoppedTask = (taskId: string, message: string) =>
-  request<Task>(`/tasks/${taskId}/resume`, { method: 'POST', body: JSON.stringify({ message }) });
+export const resumeStoppedTask = (taskId: string, message?: string) =>
+  request<Task>(`/tasks/${taskId}/resume`, { method: 'POST', body: JSON.stringify({ message: message || '' }) });
 export const updateTask = (taskId: string, data: { title?: string; description?: string }) =>
   request<Task>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(data) });
 export const deleteTask = (taskId: string) =>

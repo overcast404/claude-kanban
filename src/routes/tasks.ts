@@ -345,33 +345,10 @@ tasksRouter.post('/:id/stop', (req: Request, res: Response) => {
   }
 });
 
-// Continue a stopped task (resume existing session)
-tasksRouter.post('/:id/continue', async (req: Request, res: Response) => {
-  try {
-    const db = getDb();
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
-    if (!task) return res.status(404).json({ error: 'Task not found' });
-    if (!task.session_id) return res.status(400).json({ error: 'Task has no session to resume' });
-
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as any;
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-
-    db.prepare(`UPDATE tasks SET status = 'running', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
-    const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
-    broadcast({ type: 'task_updated', payload: updated });
-
-    resumeSession(req.params.id, project.working_dir, '请继续执行任务。').catch(console.error);
-    res.json(updated);
-  } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
-  }
-});
-
-// Resume a stopped task with a user message
+// Resume a stopped task, optionally with a custom message
 tasksRouter.post('/:id/resume', async (req: Request, res: Response) => {
   try {
     const { message } = req.body;
-    if (!message) return res.status(400).json({ error: 'message required' });
 
     const db = getDb();
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
@@ -385,7 +362,8 @@ tasksRouter.post('/:id/resume', async (req: Request, res: Response) => {
     const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
     broadcast({ type: 'task_updated', payload: updated });
 
-    resumeSession(req.params.id, project.working_dir, message).catch(console.error);
+    const resumeMessage = message || '请继续执行任务。';
+    resumeSession(req.params.id, project.working_dir, resumeMessage).catch(console.error);
     res.json(updated);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });

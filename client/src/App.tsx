@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Project, Task, TaskStatus, Decision, WsMessage, TaskOutputPayload } from '../../src/types';
-import { listProjects, listTasks, createTask, startTask, stopTask, continueTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, resumeStoppedTask, fetchChatMessages, saveChatMessage, deleteChatMessages, fetchGitStatuses, rewindTask, forkTask } from './api';
+import { listProjects, listTasks, createTask, startTask, stopTask, deleteTask, deleteProject, approveTask, submitDecision, rejectTask, resumeStoppedTask, fetchChatMessages, saveChatMessage, deleteChatMessages, fetchGitStatuses, rewindTask, forkTask } from './api';
 import { useWebSocket } from './useWebSocket';
 import { type TabKey } from './status';
 import { Sidebar } from './components/Sidebar';
@@ -795,12 +795,6 @@ export default function App() {
       onStop={async () => {
         if (selectedTask) {
           await stopTask(selectedTask.id);
-          handleRefresh(selectedTask.project_id);
-        }
-      }}
-      onContinue={async () => {
-        if (selectedTask) {
-          await continueTask(selectedTask.id);
           handleRefresh(selectedTask.project_id);
         }
       }}

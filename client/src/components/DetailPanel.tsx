@@ -16,7 +16,6 @@ interface Props {
   isMobile?: boolean;
   onStart: () => void;
   onStop: () => void;
-  onContinue: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onDecisionResolved: () => void;

@@ -5,7 +5,6 @@ interface Props {
   task: Task;
   onStart: () => void;
   onStop: () => void;
-  onContinue: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onApprove: () => void;
@@ -27,14 +26,14 @@ function Btn({ icon, label, primary, danger, onClick }: { icon: IconName; label:
   );
 }
 
-export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete, onApprove, onReject, onResumeStopped }: Props) {
+export function ActionBar({ task, onStart, onStop, onEdit, onDelete, onApprove, onReject, onResumeStopped }: Props) {
   return (
     <div className="flex flex-wrap gap-2">
       {task.status === 'pending' && (
         <>
           <Btn icon="play" label="开始" primary onClick={onStart} />
           {task.session_id && (
-            <Btn icon="corner-down-left" label="继续" onClick={onContinue} />
+            <Btn icon="corner-down-left" label="继续" onClick={onResumeStopped} />
           )}
           <Btn icon="edit" label="编辑" onClick={onEdit} />
           <Btn icon="x" label="删除" danger onClick={onDelete} />
@@ -42,10 +41,7 @@ export function ActionBar({ task, onStart, onStop, onContinue, onEdit, onDelete,
       )}
 
       {task.status === 'running' && (
-        <>
-          <Btn icon="square" label="停止" danger onClick={onStop} />
-          <Btn icon="corner-down-left" label="继续" primary onClick={onContinue} />
-        </>
+        <Btn icon="square" label="停止" danger onClick={onStop} />
       )}
 
       {task.status === 'stopped' && (
