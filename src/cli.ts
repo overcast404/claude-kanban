@@ -118,7 +118,7 @@ function removePidFile(pidFile: string) {
 async function main() {
   const argv = parseArgs(process.argv.slice(2));
 
-  const port = parseInt(argv.port as string, 10) || parseInt(process.env.PORT || '14567', 10);
+  const port = parseInt(argv.port as string, 10) || parseInt(process.env.CLAUDE_KANBAN_PORT || process.env.PORT || '14567', 10);
   const dataDir = argv.dev
     ? path.join(__dirname, '..', 'dev-data')
     : (argv.dataDir as string) || path.join(os.homedir(), '.claude-kanban');

@@ -8,7 +8,7 @@ import { broadcast } from '../broadcast';
 import type { Task, Project } from '../types';
 
 function getManagerPort(): number {
-  return parseInt(process.env.PORT || '14567', 10);
+  return parseInt(process.env.CLAUDE_KANBAN_PORT || '14567', 10);
 }
 const WORKTREE_PREFIX = 'kanban-';
 
