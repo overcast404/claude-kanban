@@ -19,6 +19,7 @@ interface Props {
   runningTaskIds: Set<string>;
   stoppedTaskIds: Set<string>;
   doneTaskIds: Set<string>;
+  decidingTaskIds: Set<string>;
   reviewingTaskIds: Set<string>;
   taskWorktrees: Record<string, string | null | undefined>;
   quoteTarget: ChatMessage | null;
@@ -37,7 +38,7 @@ interface Props {
   gitStatuses: Record<string, { changedFiles: number }>;
   hasMore: boolean;
   loadingMore: boolean;
-  onLoadMore: () => void;
+  onLoadMore: () => Promise<void> | void;
 }
 
 export function ChatPanel(props: Props) {
@@ -54,6 +55,7 @@ export function ChatPanel(props: Props) {
           runningTaskIds={props.runningTaskIds}
           stoppedTaskIds={props.stoppedTaskIds}
           doneTaskIds={props.doneTaskIds}
+          decidingTaskIds={props.decidingTaskIds}
           reviewingTaskIds={props.reviewingTaskIds}
           taskWorktrees={props.taskWorktrees}
           hasMore={props.hasMore}

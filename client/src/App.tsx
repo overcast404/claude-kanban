@@ -118,6 +118,16 @@ export default function App() {
     return ids;
   }, [tasks]);
 
+  const decidingTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const taskList of Object.values(tasks)) {
+      for (const t of taskList) {
+        if (t.status === 'deciding') ids.add(t.id);
+      }
+    }
+    return ids;
+  }, [tasks]);
+
   const runningTaskIds = useMemo(() => {
     const ids = new Set<string>();
     for (const taskList of Object.values(tasks)) {
@@ -910,6 +920,7 @@ export default function App() {
                 runningTaskIds={runningTaskIds}
                 stoppedTaskIds={stoppedTaskIds}
                 doneTaskIds={doneTaskIds}
+                decidingTaskIds={decidingTaskIds}
                 reviewingTaskIds={reviewingTaskIds}
                 taskWorktrees={taskWorktrees}
                 quoteTarget={quoteTarget}
