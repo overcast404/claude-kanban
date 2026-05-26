@@ -9,6 +9,7 @@ interface Props {
   isTaskRunning: boolean;
   isTaskStopped: boolean;
   isTaskDone: boolean;
+  isTaskReviewing: boolean;
   isLatestReview: boolean;
   isLatestExecution: boolean;
   worktree?: string | null;
@@ -90,7 +91,7 @@ function ForkMenu({ onRewind, onFork, isDone }: { onRewind: () => void; onFork: 
   );
 }
 
-export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskStopped, isTaskDone, isLatestReview, isLatestExecution, worktree, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
+export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskStopped, isTaskDone, isTaskReviewing, isLatestReview, isLatestExecution, worktree, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
   const { type, projectName, content, round } = message;
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState('');
@@ -161,6 +162,7 @@ export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskSto
         return clean.slice(0, 20) + (clean.length > 20 ? '...' : '');
       })()
     : '';
+  const showReviewActions = isReview && isLatestReview && (isTaskDone || isTaskReviewing);
 
   return (
     <div className="flex justify-start px-3">
@@ -313,42 +315,44 @@ export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskSto
         {isReview && (
           <>
             <div className="mb-2"><MarkdownContent>{content}</MarkdownContent></div>
-            <div className="flex gap-2">
-              {isTaskDone ? (
-                <>
-                  <span className="px-4 py-1.5 bg-gray-200 text-warm-text-secondary rounded-md text-[11px] inline-flex items-center gap-1 cursor-default">
-                    <Icon name="check-circle" size={12} />
-                    已完成
-                  </span>
-                  <button
-                    onClick={() => onQuoteReply(message)}
-                    className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
-                  >
-                    💬 回复
-                  </button>
-                </>
-              ) : isLatestReview ? (
-                <>
-                  <button
-                    onClick={() => onApprove(message)}
-                    className="px-4 py-1.5 bg-warm-brown text-white rounded-md text-[11px] hover:bg-warm-brown/90 transition-colors"
-                  >
-                    完成
-                  </button>
-                  <button
-                    onClick={() => onQuoteReply(message)}
-                    className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
-                  >
-                    💬 回复
-                  </button>
-                </>
-              ) : null}
-            </div>
+            {showReviewActions && (
+              <div className="flex gap-2">
+                {isTaskDone ? (
+                  <>
+                    <span className="px-4 py-1.5 bg-gray-200 text-warm-text-secondary rounded-md text-[11px] inline-flex items-center gap-1 cursor-default">
+                      <Icon name="check-circle" size={12} />
+                      已完成
+                    </span>
+                    <button
+                      onClick={() => onQuoteReply(message)}
+                      className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
+                    >
+                      💬 回复
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onApprove(message)}
+                      className="px-4 py-1.5 bg-warm-brown text-white rounded-md text-[11px] hover:bg-warm-brown/90 transition-colors"
+                    >
+                      完成
+                    </button>
+                    <button
+                      onClick={() => onQuoteReply(message)}
+                      className="px-4 py-1.5 border border-warm-border rounded-md text-[11px] text-warm-text-secondary hover:bg-gray-50 transition-colors"
+                    >
+                      💬 回复
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
 
         {/* Hide floating reply button on historical review bubbles that have no actions */}
-        {(!isReview || isTaskDone || isLatestReview) && (
+        {(!isReview || showReviewActions) && (
           <QuoteReplyButton side="right" onClick={() => onQuoteReply(message)} />
         )}
       </div>

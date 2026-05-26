@@ -375,7 +375,8 @@ export function ChatMessageList({ messages, runningTaskIds, stoppedTaskIds, done
               isTaskRunning={runningTaskIds.has(msg.taskId)}
               isTaskStopped={stoppedTaskIds.has(msg.taskId)}
               isTaskDone={doneTaskIds.has(msg.taskId)}
-              isLatestReview={reviewingTaskIds.has(msg.taskId) && latestReviewMsgIds.has(msg.id)}
+              isTaskReviewing={reviewingTaskIds.has(msg.taskId)}
+              isLatestReview={latestReviewMsgIds.has(msg.id)}
               isLatestExecution={latestExecutionMsgIds.has(msg.id)}
               worktree={msg.type !== 'user_message' && msg.type !== 'system' ? taskWorktrees[msg.taskId] : undefined}
               onDecisionClick={onDecisionClick}
