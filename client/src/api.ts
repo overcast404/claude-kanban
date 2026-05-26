@@ -77,6 +77,48 @@ export interface LogResponse {
 export const fetchTaskLogs = (taskId: string, offset: number) =>
   request<LogResponse>(`/tasks/${taskId}/logs?offset=${offset}`);
 
+// Review changes
+export interface ReviewChangeFile {
+  path: string;
+  previousPath?: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+}
+
+export interface ReviewChangesResponse {
+  taskId: string;
+  baseRef: string | null;
+  headRef: string | null;
+  worktreePath: string | null;
+  summary: {
+    files: number;
+    additions: number;
+    deletions: number;
+  };
+  files: ReviewChangeFile[];
+}
+
+export interface ReviewFileResponse {
+  path: string;
+  mode: 'diff' | 'content';
+  content: string;
+  source: string;
+  truncated: boolean;
+}
+
+export const fetchTaskReviewChanges = (taskId: string, messageId?: string) =>
+  request<ReviewChangesResponse>(
+    `/tasks/${taskId}/review-changes${messageId ? `?messageId=${encodeURIComponent(messageId)}` : ''}`
+  );
+
+export const fetchTaskReviewFile = (taskId: string, path: string, mode: 'diff' | 'content', messageId?: string) => {
+  const params = new URLSearchParams({ path, mode });
+  if (messageId) params.set('messageId', messageId);
+  return request<ReviewFileResponse>(`/tasks/${taskId}/review-changes/file?${params.toString()}`);
+};
+
 // Chat messages
 export interface ChatMessageRow {
   id: string;

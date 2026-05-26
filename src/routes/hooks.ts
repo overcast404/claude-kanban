@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
-import { getRecentOutput } from '../services/session-manager';
+import { findWorktreeByTask, getRecentOutput } from '../services/session-manager';
 import { v4 as uuid } from 'uuid';
+import { execFileSync } from 'child_process';
 
 export const hooksRouter = Router();
 
@@ -54,12 +55,29 @@ hooksRouter.post('/:taskId', (req: Request, res: Response) => {
   // Handle mark_complete MCP call
   if (hookEventName === 'PreToolUse' && toolName === 'mcp__manager__mark_complete') {
     const summary = hookBody.tool_input?.summary || '';
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as { project_id: string } | undefined;
+    const project = task
+      ? db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as { working_dir: string } | undefined
+      : undefined;
+    let checkpointCommit: string | null = null;
 
-    db.prepare(`UPDATE tasks SET status = 'reviewing', summary = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(summary, taskId);
+    if (project) {
+      try {
+        const wt = findWorktreeByTask(project.working_dir, taskId);
+        const cwd = wt?.path || project.working_dir;
+        checkpointCommit = execFileSync('git', ['-C', cwd, 'rev-parse', 'HEAD'], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }).toString('utf8').trim();
+      } catch (e) {
+        console.error(`[Hooks] Failed to capture checkpoint for task ${taskId}:`, (e as Error).message);
+      }
+    }
 
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
-    broadcast({ type: 'task_updated', payload: task });
+    db.prepare(`UPDATE tasks SET status = 'reviewing', summary = ?, checkpoint_commit = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(summary, checkpointCommit, taskId);
+
+    const updatedTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    broadcast({ type: 'task_updated', payload: updatedTask });
 
     return res.json({
       hookSpecificOutput: {

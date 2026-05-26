@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ChatMessage } from '../App';
 import { Icon } from './Icon';
 import MarkdownContent from './MarkdownContent';
+import { ReviewChanges } from './ReviewChanges';
 
 interface Props {
   message: ChatMessage;
@@ -153,6 +154,9 @@ export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskSto
   }
 
   const label = round > 0 ? `${projectName} · 继续执行` : projectName;
+  const bubbleWidthClass = isReview && isLatestReview
+    ? 'w-full max-w-[900px]'
+    : 'max-w-[75%]';
 
   // Get the quoted message text — single line, clean, truncated
   const quotedMsg = message.quoteMessageId ? getQuotedMessage(message.quoteMessageId) : undefined;
@@ -166,7 +170,7 @@ export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskSto
 
   return (
     <div className="flex justify-start px-3">
-      <div className={`group relative border ${borderStyle} ${!isReview ? 'bg-white' : ''} px-3 py-2.5 rounded-xl rounded-bl-sm max-w-[75%] min-w-0 text-[13px] leading-relaxed shadow-sm`}>
+      <div className={`group relative border ${borderStyle} ${!isReview ? 'bg-white' : ''} px-3 py-2.5 rounded-xl rounded-bl-sm ${bubbleWidthClass} min-w-0 text-[13px] leading-relaxed shadow-sm`}>
         {/* Quote reference with real text, clickable to open thread */}
         {quoteText && (
           <QuoteRef text={quoteText} onClick={() => onThreadOpen(message.taskId)} />
@@ -315,8 +319,11 @@ export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskSto
         {isReview && (
           <>
             <div className="mb-2"><MarkdownContent>{content}</MarkdownContent></div>
+            {isLatestReview && (
+              <ReviewChanges taskId={message.taskId} messageId={message.id} />
+            )}
             {showReviewActions && (
-              <div className="flex gap-2">
+              <div className="mt-2 flex gap-2">
                 {isTaskDone ? (
                   <>
                     <span className="px-4 py-1.5 bg-gray-200 text-warm-text-secondary rounded-md text-[11px] inline-flex items-center gap-1 cursor-default">

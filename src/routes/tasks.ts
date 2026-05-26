@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -15,10 +15,241 @@ function getDataDir(): string {
 
 export const tasksRouter = Router();
 
+const MAX_GIT_OUTPUT_BYTES = 1024 * 1024 * 6;
+const MAX_REVIEW_FILE_BYTES = 1024 * 256;
+
+interface ReviewDiffContext {
+  cwd: string;
+  baseRef: string | null;
+  compareRef: string | null;
+  headLabel: string;
+  worktreePath: string | null;
+}
+
+interface ReviewFileChange {
+  path: string;
+  previousPath?: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+}
+
 function enrichWorktree(task: Task, workingDir: string): Task {
   if (task.status !== 'running') return task;
   const wt = findWorktreeByTask(workingDir, task.id);
   return { ...task, _worktree: wt ? wt.branch : null };
+}
+
+function runGit(cwd: string, args: string[], maxBuffer = MAX_GIT_OUTPUT_BYTES): string {
+  return execFileSync('git', ['-C', cwd, ...args], {
+    maxBuffer,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).toString('utf8');
+}
+
+function refExists(cwd: string, ref: string): boolean {
+  try {
+    runGit(cwd, ['rev-parse', '--verify', `${ref}^{commit}`], 1024 * 128);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isGitRepoPath(cwd: string): boolean {
+  try {
+    runGit(cwd, ['rev-parse', '--git-dir'], 1024 * 128);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function matchesKanbanTaskRef(text: string, taskId: string): boolean {
+  const idx = text.lastIndexOf('kanban-');
+  if (idx === -1) return false;
+  const suffix = text.slice(idx + 'kanban-'.length);
+  return taskId.startsWith(suffix) || suffix.startsWith(taskId);
+}
+
+function findBranchByTask(workingDir: string, taskId: string): string | null {
+  try {
+    const output = runGit(workingDir, ['branch', '--list'], 1024 * 1024);
+    for (const line of output.split('\n')) {
+      const name = line.replace(/^[* ]\s*/, '').trim();
+      if (matchesKanbanTaskRef(name, taskId)) return name;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function safeRelativePath(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('file path required');
+  }
+  const filePath = value.trim();
+  if (path.isAbsolute(filePath) || filePath.split(/[\\/]/).includes('..')) {
+    throw new Error('invalid file path');
+  }
+  return filePath;
+}
+
+function assertInsideDir(rootDir: string, relativePath: string): string {
+  const root = path.resolve(rootDir);
+  const absolutePath = path.resolve(rootDir, relativePath);
+  if (absolutePath !== root && !absolutePath.startsWith(root + path.sep)) {
+    throw new Error('invalid file path');
+  }
+  return absolutePath;
+}
+
+function buildDiffArgs(ctx: ReviewDiffContext, options: string[] = [], filePath?: string): string[] {
+  const refs = ctx.baseRef
+    ? (ctx.compareRef ? [ctx.baseRef, ctx.compareRef] : [ctx.baseRef])
+    : ['HEAD'];
+  return ['diff', '--find-renames', ...options, ...refs, '--', ...(filePath ? [filePath] : [])];
+}
+
+function parseNameStatus(output: string): Array<{ status: string; path: string; previousPath?: string }> {
+  const tokens = output.split('\0').filter(Boolean);
+  const entries: Array<{ status: string; path: string; previousPath?: string }> = [];
+
+  for (let i = 0; i < tokens.length;) {
+    const rawStatus = tokens[i++];
+    if (!rawStatus) break;
+    const status = rawStatus[0];
+
+    if (status === 'R' || status === 'C') {
+      const previousPath = tokens[i++];
+      const nextPath = tokens[i++];
+      if (nextPath) entries.push({ status, path: nextPath, previousPath });
+    } else {
+      const filePath = tokens[i++];
+      if (filePath) entries.push({ status, path: filePath });
+    }
+  }
+
+  return entries;
+}
+
+function readFileStats(ctx: ReviewDiffContext, filePath: string): Pick<ReviewFileChange, 'additions' | 'deletions' | 'binary'> {
+  const output = runGit(ctx.cwd, buildDiffArgs(ctx, ['--numstat'], filePath), 1024 * 1024).trim();
+  let additions = 0;
+  let deletions = 0;
+  let binary = false;
+
+  for (const line of output.split('\n')) {
+    if (!line.trim()) continue;
+    const [added, deleted] = line.split('\t');
+    if (added === '-' || deleted === '-') {
+      binary = true;
+      continue;
+    }
+    additions += Number.parseInt(added, 10) || 0;
+    deletions += Number.parseInt(deleted, 10) || 0;
+  }
+
+  return { additions, deletions, binary };
+}
+
+function resolveReviewDiffContext(task: Task, project: { working_dir: string }, messageId?: string): ReviewDiffContext {
+  const db = getDb();
+  const wt = findWorktreeByTask(project.working_dir, task.id);
+  const branch = wt ? null : findBranchByTask(project.working_dir, task.id);
+  const cwd = wt?.path || project.working_dir;
+
+  if (!isGitRepoPath(cwd)) {
+    throw new Error('Project is not a git repository');
+  }
+
+  const reviewMsg = messageId
+    ? db.prepare(`
+        SELECT id, checkpoint_commit, timestamp FROM chat_messages
+        WHERE id = ? AND task_id = ? AND type = 'ai_review'
+      `).get(messageId, task.id) as { id: string; checkpoint_commit: string | null; timestamp: string } | undefined
+    : undefined;
+
+  const previousReview = reviewMsg
+    ? db.prepare(`
+        SELECT checkpoint_commit FROM chat_messages
+        WHERE task_id = ? AND type = 'ai_review' AND timestamp < ? AND checkpoint_commit IS NOT NULL
+        ORDER BY timestamp DESC LIMIT 1
+      `).get(task.id, reviewMsg.timestamp) as { checkpoint_commit: string | null } | undefined
+    : undefined;
+
+  const requestedBase = previousReview?.checkpoint_commit || task.initial_commit || null;
+  const baseRef = requestedBase && refExists(cwd, requestedBase)
+    ? requestedBase
+    : (refExists(cwd, 'HEAD') ? 'HEAD' : null);
+
+  let compareRef: string | null = null;
+  let headLabel = wt ? '工作区' : 'HEAD';
+  const checkpointCommit = reviewMsg?.checkpoint_commit || task.checkpoint_commit;
+
+  if (!wt) {
+    if (checkpointCommit && refExists(cwd, checkpointCommit)) {
+      compareRef = checkpointCommit;
+      headLabel = checkpointCommit.slice(0, 8);
+    } else if (branch && refExists(cwd, branch)) {
+      compareRef = branch;
+      headLabel = branch;
+    }
+  }
+
+  return {
+    cwd,
+    baseRef,
+    compareRef,
+    headLabel,
+    worktreePath: wt?.path || null,
+  };
+}
+
+function listReviewChanges(ctx: ReviewDiffContext): ReviewFileChange[] {
+  const output = runGit(ctx.cwd, buildDiffArgs(ctx, ['--name-status', '-z']));
+  const entries = parseNameStatus(output);
+
+  return entries.map(entry => {
+    const stats = readFileStats(ctx, entry.path);
+    return {
+      ...entry,
+      ...stats,
+    };
+  });
+}
+
+function readReviewFileContent(ctx: ReviewDiffContext, filePath: string): { content: string; source: string; truncated: boolean } {
+  const currentPath = assertInsideDir(ctx.cwd, filePath);
+  let content: string;
+  let source = ctx.compareRef || ctx.headLabel;
+
+  if (ctx.compareRef) {
+    try {
+      content = runGit(ctx.cwd, ['show', `${ctx.compareRef}:${filePath}`], MAX_REVIEW_FILE_BYTES + 1024);
+    } catch {
+      if (!ctx.baseRef) throw new Error('File not found');
+      content = runGit(ctx.cwd, ['show', `${ctx.baseRef}:${filePath}`], MAX_REVIEW_FILE_BYTES + 1024);
+      source = `${ctx.baseRef.slice(0, 8)}（已删除）`;
+    }
+  } else if (fs.existsSync(currentPath) && fs.statSync(currentPath).isFile()) {
+    content = fs.readFileSync(currentPath, 'utf8');
+    source = '工作区';
+  } else if (ctx.baseRef) {
+    content = runGit(ctx.cwd, ['show', `${ctx.baseRef}:${filePath}`], MAX_REVIEW_FILE_BYTES + 1024);
+    source = `${ctx.baseRef.slice(0, 8)}（已删除）`;
+  } else {
+    throw new Error('File not found');
+  }
+
+  const truncated = Buffer.byteLength(content, 'utf8') > MAX_REVIEW_FILE_BYTES;
+  return {
+    content: truncated ? content.slice(0, MAX_REVIEW_FILE_BYTES) : content,
+    source,
+    truncated,
+  };
 }
 
 // List tasks for a project (query: ?projectId=...)
@@ -83,6 +314,84 @@ tasksRouter.get('/:id/logs', (req: Request, res: Response) => {
     offset: offset + buffer.length,
     eof: offset + buffer.length >= stat.size,
   });
+});
+
+// Get review change summary for the latest/referenced review bubble
+tasksRouter.get('/:id/review-changes', (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as { working_dir: string } | undefined;
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const ctx = resolveReviewDiffContext(task, project, req.query.messageId as string | undefined);
+    const files = listReviewChanges(ctx);
+    const summary = files.reduce(
+      (acc, file) => ({
+        files: acc.files + 1,
+        additions: acc.additions + file.additions,
+        deletions: acc.deletions + file.deletions,
+      }),
+      { files: 0, additions: 0, deletions: 0 }
+    );
+
+    res.json({
+      taskId: task.id,
+      baseRef: ctx.baseRef,
+      headRef: ctx.compareRef || ctx.headLabel,
+      worktreePath: ctx.worktreePath,
+      summary,
+      files,
+    });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Get a single changed file's diff or current content
+tasksRouter.get('/:id/review-changes/file', (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) as Task | undefined;
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as { working_dir: string } | undefined;
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const filePath = safeRelativePath(req.query.path);
+    const mode = req.query.mode === 'content' ? 'content' : 'diff';
+    const ctx = resolveReviewDiffContext(task, project, req.query.messageId as string | undefined);
+
+    if (mode === 'content') {
+      const file = readReviewFileContent(ctx, filePath);
+      res.json({
+        path: filePath,
+        mode,
+        content: file.content,
+        source: file.source,
+        truncated: file.truncated,
+      });
+      return;
+    }
+
+    const diff = runGit(
+      ctx.cwd,
+      buildDiffArgs(ctx, ['--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'], filePath),
+      MAX_REVIEW_FILE_BYTES + 1024
+    );
+    const truncated = Buffer.byteLength(diff, 'utf8') > MAX_REVIEW_FILE_BYTES;
+    res.json({
+      path: filePath,
+      mode,
+      content: truncated ? diff.slice(0, MAX_REVIEW_FILE_BYTES) : diff,
+      source: `${ctx.baseRef?.slice(0, 8) || 'HEAD'} -> ${ctx.compareRef || ctx.headLabel}`,
+      truncated,
+    });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
 });
 
 // Create task
