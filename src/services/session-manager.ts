@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import type { Task, Project } from '../types';
+import { captureWorkingTree, isGitRepo as isGitRepoPath, resolveCommit, resolveTree } from './git-snapshot';
 
 function getManagerPort(): number {
   return parseInt(process.env.CLAUDE_KANBAN_PORT || '14567', 10);
@@ -48,15 +49,6 @@ async function checkClaudeAvailable(): Promise<boolean> {
 
 function getWorktreeName(taskId: string): string {
   return `${WORKTREE_PREFIX}${taskId}`;
-}
-
-function isGitRepo(dir: string): boolean {
-  try {
-    execSync(`git -C "${dir}" rev-parse --git-dir`, { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function findWorktreeByTask(workingDir: string, taskId: string): { path: string; branch: string } | null {
@@ -244,23 +236,28 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
   writeProtocolFile(protocolPath);
   writeMcpConfig(mcpConfigPath);
 
-  const useWorktree = !!task.use_worktree && isGitRepo(workingDir);
+  const projectIsGitRepo = isGitRepoPath(workingDir);
+  const useWorktree = !!task.use_worktree && projectIsGitRepo;
   if (useWorktree) {
     cleanupWorktree(workingDir, task.id);
   }
 
-  // Capture initial git commit before Claude starts working
+  // Capture the task baseline before Claude starts working.
   let initialCommit: string | null = null;
-  if (useWorktree) {
-    try {
-      initialCommit = execSync(`git -C "${workingDir}" rev-parse HEAD`, { stdio: 'pipe' }).toString().trim();
-    } catch (e) {
-      console.error(`[SessionManager] Failed to capture initial commit for task ${task.id}:`, (e as Error).message);
+  let baseTree: string | null = null;
+  if (projectIsGitRepo) {
+    initialCommit = resolveCommit(workingDir, 'HEAD');
+    baseTree = useWorktree
+      ? resolveTree(workingDir, 'HEAD')
+      : captureWorkingTree(workingDir);
+
+    if (!baseTree) {
+      console.error(`[SessionManager] Failed to capture base tree for task ${task.id}`);
     }
   }
 
-  db.prepare(`UPDATE tasks SET status = 'running', session_id = ?, initial_commit = ?, checkpoint_commit = NULL, summary = NULL, updated_at = datetime('now') WHERE id = ?`)
-    .run(sessionId, initialCommit, task.id);
+  db.prepare(`UPDATE tasks SET status = 'running', session_id = ?, initial_commit = ?, checkpoint_commit = NULL, base_tree = ?, summary = NULL, updated_at = datetime('now') WHERE id = ?`)
+    .run(sessionId, initialCommit, baseTree, task.id);
 
   const env = {
     ...process.env,
@@ -589,11 +586,8 @@ async function checkAndHandleCompletion(taskId: string, stdout: string): Promise
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as Project | undefined;
     if (project) {
       const wt = findWorktreeByTask(project.working_dir, taskId);
-      if (wt) {
-        checkpointCommit = execSync(`git -C "${wt.path}" rev-parse HEAD`, { stdio: 'pipe' }).toString().trim();
-      } else {
-        checkpointCommit = execSync(`git -C "${project.working_dir}" rev-parse HEAD`, { stdio: 'pipe' }).toString().trim();
-      }
+      const cwd = wt && fs.existsSync(wt.path) ? wt.path : project.working_dir;
+      checkpointCommit = resolveCommit(cwd, 'HEAD');
     }
   } catch (e) {
     console.error(`[SessionManager] Failed to capture checkpoint commit for task ${taskId}:`, (e as Error).message);
@@ -637,6 +631,14 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
   ];
 
   const resumeCwd = ensureWorktree(workingDir, task.id) || workingDir;
+
+  if (!task.base_tree) {
+    const baseTree = resolveTree(resumeCwd, task.initial_commit) || captureWorkingTree(resumeCwd);
+    if (baseTree) {
+      db.prepare(`UPDATE tasks SET base_tree = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(baseTree, taskId);
+    }
+  }
 
   console.log(`[SessionManager] Resuming: claude ${args.join(' ')} (cwd=${resumeCwd})`);
 

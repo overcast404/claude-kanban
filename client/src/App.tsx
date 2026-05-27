@@ -13,7 +13,7 @@ import { CreateTaskModal } from './components/CreateTaskModal';
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { EditTaskModal } from './components/EditTaskModal';
 import { ReviewModal } from './components/ReviewModal';
-import { createChunkParser, type ChunkParser } from './activity';
+import { createChunkParser, createResultParser, type ChunkParser, type ResultParser } from './activity';
 import { ChatPanel } from './components/ChatPanel';
 import { ThreadPanel } from './components/ThreadPanel';
 
@@ -42,6 +42,117 @@ function chatMsgId() {
   return 'cm_' + Math.random().toString(36).slice(2, 10);
 }
 
+function stableChatMsgId(...parts: Array<string | number | null | undefined>) {
+  return ['cm', ...parts.map(part => String(part || 'none').replace(/[^a-zA-Z0-9_-]/g, '_'))].join('_');
+}
+
+function chatMessageKey(msg: ChatMessage) {
+  if (msg.type === 'user_message') return `id:${msg.id}`;
+  if (msg.type === 'ai_execution') return `exec:${msg.taskId}`;
+  if (msg.type === 'ai_decision') {
+    return `decision:${msg.taskId}:${msg.round}:${msg.decision?.id || msg.content}`;
+  }
+  if (msg.type === 'ai_review') {
+    return `review:${msg.taskId}:${msg.checkpointCommit || ''}:${msg.content}`;
+  }
+  return `system:${msg.taskId}:${msg.round}:${msg.content}`;
+}
+
+function mergeExecutionMessage(current: ChatMessage, next: ChatMessage): ChatMessage {
+  return {
+    ...current,
+    projectId: next.projectId || current.projectId,
+    projectName: next.projectName || current.projectName,
+    content: next.content || current.content,
+    quoteMessageId: next.quoteMessageId || current.quoteMessageId,
+    round: Math.max(current.round || 0, next.round || 0),
+    checkpointCommit: next.checkpointCommit || current.checkpointCommit,
+  };
+}
+
+function dedupeChatMessages(messages: ChatMessage[]) {
+  const seen = new Map<string, number>();
+  const deduped: ChatMessage[] = [];
+
+  for (const msg of messages) {
+    const key = chatMessageKey(msg);
+    const existingIndex = seen.get(key);
+    if (existingIndex !== undefined) {
+      if (msg.type === 'ai_execution') {
+        deduped[existingIndex] = mergeExecutionMessage(deduped[existingIndex], msg);
+      }
+      continue;
+    }
+    seen.set(key, deduped.length);
+    deduped.push(msg);
+  }
+
+  return deduped;
+}
+
+function upsertChatMessage(messages: ChatMessage[], next: ChatMessage) {
+  const nextKey = chatMessageKey(next);
+  const index = messages.findIndex(msg => msg.id === next.id || chatMessageKey(msg) === nextKey);
+
+  if (index === -1) return [...messages, next];
+
+  const updated = [...messages];
+  updated[index] = {
+    ...updated[index],
+    ...next,
+    id: updated[index].id,
+    timestamp: updated[index].timestamp,
+  };
+  return updated;
+}
+
+function collapseExecutionMessagesForTask(messages: ChatMessage[], taskId: string, incoming?: ChatMessage) {
+  let firstIndex = -1;
+  let changed = false;
+  const collapsed: ChatMessage[] = [];
+
+  for (const msg of messages) {
+    if (msg.taskId !== taskId || msg.type !== 'ai_execution') {
+      collapsed.push(msg);
+      continue;
+    }
+
+    if (firstIndex === -1) {
+      firstIndex = collapsed.length;
+      collapsed.push(msg);
+    } else {
+      collapsed[firstIndex] = mergeExecutionMessage(collapsed[firstIndex], msg);
+      changed = true;
+    }
+  }
+
+  if (incoming) {
+    if (firstIndex === -1) {
+      collapsed.push(incoming);
+      changed = true;
+    } else {
+      const merged = mergeExecutionMessage(collapsed[firstIndex], incoming);
+      changed = changed || merged !== collapsed[firstIndex];
+      collapsed[firstIndex] = merged;
+    }
+  }
+
+  if (!changed && collapsed.length === messages.length) return messages;
+  return collapsed;
+}
+
+function collapseExecutionMessages(messages: ChatMessage[], taskIds: Set<string>) {
+  let next = messages;
+  for (const taskId of taskIds) {
+    next = collapseExecutionMessagesForTask(next, taskId);
+  }
+  return next;
+}
+
+function upsertExecutionMessage(messages: ChatMessage[], next: ChatMessage) {
+  return collapseExecutionMessagesForTask(messages, next.taskId, next);
+}
+
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
@@ -65,6 +176,8 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const parsersRef = useRef<Record<string, ChunkParser>>({});
   const chatParsersRef = useRef<Record<string, ChunkParser>>({});
+  const resultParsersRef = useRef<Record<string, ResultParser>>({});
+  const finalResultsRef = useRef<Record<string, string>>({});
   const streamSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Save a chat message to server (fire-and-forget)
@@ -236,9 +349,10 @@ export default function App() {
   useEffect(() => {
     fetchChatMessages(PAGE_SIZE, 0).then(rows => {
       if (rows.length > 0) {
-        const msgs = parseChatRows(rows).reverse();
+        const msgs = dedupeChatMessages(parseChatRows(rows).reverse());
         for (const m of msgs) {
           if (m.type === 'user_message' && m.taskId) taskLastUserMsg.current[m.taskId] = m.id;
+          if (m.taskId) taskRounds.current[m.taskId] = Math.max(taskRounds.current[m.taskId] || 0, m.round || 0);
         }
         setChatMessages(msgs);
         setHasMore(rows.length >= PAGE_SIZE);
@@ -246,6 +360,16 @@ export default function App() {
       }
     }).catch(() => {});
   }, [parseChatRows]);
+
+  useEffect(() => {
+    const activeExecutionTaskIds = new Set([...runningTaskIds, ...stoppedTaskIds]);
+    if (activeExecutionTaskIds.size === 0) return;
+
+    setChatMessages(prev => {
+      const next = collapseExecutionMessages(prev, activeExecutionTaskIds);
+      return next === prev ? prev : next;
+    });
+  }, [runningTaskIds, stoppedTaskIds]);
 
   const loadMoreMessages = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -258,8 +382,9 @@ export default function App() {
           if (m.type === 'user_message' && m.taskId && !taskLastUserMsg.current[m.taskId]) {
             taskLastUserMsg.current[m.taskId] = m.id;
           }
+          if (m.taskId) taskRounds.current[m.taskId] = Math.max(taskRounds.current[m.taskId] || 0, m.round || 0);
         }
-        setChatMessages(prev => [...olderMsgs, ...prev]);
+        setChatMessages(prev => dedupeChatMessages([...olderMsgs, ...prev]));
         setHasMore(rows.length >= PAGE_SIZE);
         loadedOffset.current += rows.length;
       } else {
@@ -321,6 +446,9 @@ export default function App() {
       setTaskOutputs(prev => { const next = { ...prev }; delete next[id]; return next; });
       setTaskActivities(prev => { const next = { ...prev }; delete next[id]; return next; });
       delete parsersRef.current[id];
+      delete chatParsersRef.current[id];
+      delete resultParsersRef.current[id];
+      delete finalResultsRef.current[id];
       loadProjects();
     } else if (msg.type === 'project_deleted') {
       const { id } = msg.payload as { id: string };
@@ -358,8 +486,10 @@ export default function App() {
       if (task.status === 'running' && (!prevStatus || prevStatus === 'pending')) {
         // First execution — create ai_execution bubble
         taskRounds.current[task.id] = 0;
-        setChatMessages(prev => [...prev, {
-          id: chatMsgId(),
+        delete finalResultsRef.current[task.id];
+        delete resultParsersRef.current[task.id];
+        setChatMessages(prev => upsertExecutionMessage(prev, {
+          id: stableChatMsgId('exec', task.id, 0),
           taskId: task.id,
           projectId: task.project_id,
           projectName: pName,
@@ -368,13 +498,15 @@ export default function App() {
           quoteMessageId: taskLastUserMsg.current[task.id],
           round: 0,
           timestamp: new Date().toISOString(),
-        }]);
+        }));
       } else if (task.status === 'running' && prevStatus && prevStatus !== 'pending' && prevStatus !== 'running') {
         // Resumed after deciding or rejected — new AI execution bubble with incremented round
         const round = (taskRounds.current[task.id] || 0) + 1;
         taskRounds.current[task.id] = round;
-        setChatMessages(prev => [...prev, {
-          id: chatMsgId(),
+        delete finalResultsRef.current[task.id];
+        delete resultParsersRef.current[task.id];
+        setChatMessages(prev => upsertExecutionMessage(prev, {
+          id: stableChatMsgId('exec', task.id, round),
           taskId: task.id,
           projectId: task.project_id,
           projectName: pName,
@@ -383,7 +515,7 @@ export default function App() {
           quoteMessageId: taskLastUserMsg.current[task.id],
           round,
           timestamp: new Date().toISOString(),
-        }]);
+        }));
       }
 
       if (task.status === 'deciding') {
@@ -412,32 +544,35 @@ export default function App() {
             }
           }
           const filtered = prev.filter(m => !(m.taskId === task.id && m.type === 'ai_execution'));
-          return [...filtered, {
-            id: chatMsgId(),
+          const finalResult = finalResultsRef.current[task.id]?.trim();
+          const round = taskRounds.current[task.id] || 0;
+          return upsertChatMessage(filtered, {
+            id: stableChatMsgId('review', task.id, task.checkpoint_commit?.slice(0, 12), round),
             taskId: task.id,
             projectId: task.project_id,
             projectName: pName,
             type: 'ai_review',
-            content: task.summary || '任务已完成',
+            content: finalResult || task.summary || '任务已完成',
             quoteMessageId: taskLastUserMsg.current[task.id],
-            round: taskRounds.current[task.id] || 0,
+            round,
             checkpointCommit: task.checkpoint_commit || undefined,
             timestamp: new Date().toISOString(),
-          }];
+          });
         });
       }
 
       if (task.status === 'done') {
-        setChatMessages(prev => [...prev, {
-          id: chatMsgId(),
+        const round = taskRounds.current[task.id] || 0;
+        setChatMessages(prev => upsertChatMessage(prev, {
+          id: stableChatMsgId('done', task.id, round),
           taskId: task.id,
           projectId: task.project_id,
           projectName: pName,
           type: 'system',
           content: `✅ ${pName} 任务完成`,
-          round: taskRounds.current[task.id] || 0,
+          round,
           timestamp: new Date().toISOString(),
-        }]);
+        }));
       }
     }
 
@@ -491,8 +626,8 @@ export default function App() {
         const content = execContext
           ? execContext + '\n\n---\n\n' + decision.question
           : decision.question;
-        return [...filtered, {
-          id: chatMsgId(),
+        return upsertChatMessage(filtered, {
+          id: stableChatMsgId('decision', decision.id || task.id, taskRounds.current[task.id] || 0),
           taskId: task.id,
           projectId: task.project_id,
           projectName: pName,
@@ -502,7 +637,7 @@ export default function App() {
           quoteMessageId: taskLastUserMsg.current[task.id],
           round: taskRounds.current[task.id] || 0,
           timestamp: new Date().toISOString(),
-        }];
+        });
       });
     }
 
@@ -510,6 +645,29 @@ export default function App() {
       const payload = msg.payload as TaskOutputPayload;
       // Parse output for chat: show concise activity like "Read: src/foo.ts"
       if (payload.stream === 'stdout') {
+        if (!resultParsersRef.current[payload.taskId]) {
+          resultParsersRef.current[payload.taskId] = createResultParser();
+        }
+        const finalResult = resultParsersRef.current[payload.taskId].feed(payload.text);
+        if (finalResult) {
+          finalResultsRef.current[payload.taskId] = finalResult;
+          const currentStatus = lastTaskStatus.current[payload.taskId];
+          if (currentStatus === 'reviewing' || currentStatus === 'done') {
+            setChatMessages(prev => {
+              const updated = [...prev];
+              for (let i = updated.length - 1; i >= 0; i--) {
+                if (updated[i].taskId === payload.taskId && updated[i].type === 'ai_review') {
+                  if (updated[i].content !== finalResult) {
+                    updated[i] = { ...updated[i], content: finalResult };
+                  }
+                  return updated;
+                }
+              }
+              return prev;
+            });
+          }
+        }
+
         if (!chatParsersRef.current[payload.taskId]) {
           chatParsersRef.current[payload.taskId] = createChunkParser();
         }
@@ -517,7 +675,7 @@ export default function App() {
         if (activity) {
           setChatMessages(prev => {
             const updated = [...prev];
-            for (let i = updated.length - 1; i >= 0; i--) {
+            for (let i = 0; i < updated.length; i++) {
               if (updated[i].taskId === payload.taskId && updated[i].type === 'ai_execution') {
                 if (activity !== updated[i].content) {
                   updated[i] = { ...updated[i], content: activity };
@@ -525,7 +683,7 @@ export default function App() {
                 break;
               }
             }
-            return updated;
+            return collapseExecutionMessagesForTask(updated, payload.taskId);
           });
         }
       }
@@ -602,7 +760,7 @@ export default function App() {
           round: exeRound,
           timestamp: new Date().toISOString(),
         };
-        setChatMessages(prev => [...prev, exeBubble]);
+        setChatMessages(prev => upsertExecutionMessage(prev, exeBubble));
 
         try {
           if (isStoppedExecution) {
@@ -700,20 +858,20 @@ export default function App() {
       round: exeRound,
       timestamp: new Date().toISOString(),
     };
-    setChatMessages(prev => [...prev, exeBubble]);
+    setChatMessages(prev => upsertExecutionMessage(prev, exeBubble));
 
     try {
       await submitDecision(msg.taskId, answer);
       handleRefresh(msg.projectId);
     } catch (err) {
       console.error('Decision submit failed:', err);
-      setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id || m.id !== exeBubble.id));
+      setChatMessages(prev => prev.filter(m => m.id !== replyMsg.id && m.id !== exeBubble.id));
     }
   }, [handleRefresh]);
 
   const handleChatApprove = useCallback(async (msg: ChatMessage) => {
     const systemMsg: ChatMessage = {
-      id: chatMsgId(),
+      id: stableChatMsgId('done', msg.taskId, msg.round),
       taskId: msg.taskId,
       projectId: msg.projectId,
       projectName: msg.projectName,
@@ -722,7 +880,7 @@ export default function App() {
       round: msg.round,
       timestamp: new Date().toISOString(),
     };
-    setChatMessages(prev => [...prev, systemMsg]);
+    setChatMessages(prev => upsertChatMessage(prev, systemMsg));
 
     try {
       await approveTask(msg.taskId);
@@ -766,7 +924,7 @@ export default function App() {
       handleRefresh(msg.projectId);
       // Reload chat to reflect trimmed messages
       const rows = await fetchChatMessages(200, 0);
-      const msgs = parseChatRows(rows).reverse();
+      const msgs = dedupeChatMessages(parseChatRows(rows).reverse());
       setChatMessages(msgs);
     } catch (err) {
       console.error('Rewind failed:', err);

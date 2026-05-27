@@ -50,6 +50,7 @@ function initSchema(db: Database.Database): void {
       summary TEXT,
       checkpoint_commit TEXT,
       initial_commit TEXT,
+      base_tree TEXT,
       use_worktree INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -94,6 +95,7 @@ function initSchema(db: Database.Database): void {
   // Migrations for existing databases
   try { db.exec(`ALTER TABLE tasks ADD COLUMN checkpoint_commit TEXT`); } catch { /* column exists */ }
   try { db.exec(`ALTER TABLE tasks ADD COLUMN initial_commit TEXT`); } catch { /* column exists */ }
+  try { db.exec(`ALTER TABLE tasks ADD COLUMN base_tree TEXT`); } catch { /* column exists */ }
   try { db.exec(`ALTER TABLE chat_messages ADD COLUMN checkpoint_commit TEXT`); } catch { /* column exists */ }
   try { db.exec(`ALTER TABLE tasks ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1`); } catch { /* column exists */ }
 
@@ -123,6 +125,7 @@ function ensureStoppedStatusAllowed(db: Database.Database): void {
           summary TEXT,
           checkpoint_commit TEXT,
           initial_commit TEXT,
+          base_tree TEXT,
           use_worktree INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -131,7 +134,7 @@ function ensureStoppedStatusAllowed(db: Database.Database): void {
 
         INSERT INTO tasks_new (
           id, project_id, title, description, status, session_id, summary,
-          checkpoint_commit, initial_commit, use_worktree, created_at, updated_at
+          checkpoint_commit, initial_commit, base_tree, use_worktree, created_at, updated_at
         )
         SELECT
           id, project_id, title, description,
@@ -139,7 +142,7 @@ function ensureStoppedStatusAllowed(db: Database.Database): void {
             WHEN status IN ('pending','running','deciding','reviewing','done','stopped') THEN status
             ELSE 'pending'
           END,
-          session_id, summary, checkpoint_commit, initial_commit, use_worktree, created_at, updated_at
+          session_id, summary, checkpoint_commit, initial_commit, base_tree, use_worktree, created_at, updated_at
         FROM tasks;
 
         DROP TABLE tasks;

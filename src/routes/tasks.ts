@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { execFileSync, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -8,6 +8,15 @@ import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import { Task, TaskCreateInput, Decision } from '../types';
 import { startTask, resumeSession, stopSessionManager, getRunningCount, cleanupWorktree, findWorktreeByTask, isSessionActive } from '../services/session-manager';
+import {
+  MAX_GIT_OUTPUT_BYTES,
+  captureWorkingTree,
+  getParentCommit,
+  isGitRepo as isGitRepoPath,
+  resolveCommit,
+  resolveTree,
+  runGit,
+} from '../services/git-snapshot';
 
 function getDataDir(): string {
   return process.env.CLAUDE_KANBAN_DATA_DIR || path.join(os.homedir(), '.claude-kanban');
@@ -15,7 +24,6 @@ function getDataDir(): string {
 
 export const tasksRouter = Router();
 
-const MAX_GIT_OUTPUT_BYTES = 1024 * 1024 * 6;
 const MAX_REVIEW_FILE_BYTES = 1024 * 256;
 
 interface ReviewDiffContext {
@@ -41,29 +49,8 @@ function enrichWorktree(task: Task, workingDir: string): Task {
   return { ...task, _worktree: wt ? wt.branch : null };
 }
 
-function runGit(cwd: string, args: string[], maxBuffer = MAX_GIT_OUTPUT_BYTES): string {
-  return execFileSync('git', ['-C', cwd, ...args], {
-    maxBuffer,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).toString('utf8');
-}
-
 function refExists(cwd: string, ref: string): boolean {
-  try {
-    runGit(cwd, ['rev-parse', '--verify', `${ref}^{commit}`], 1024 * 128);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isGitRepoPath(cwd: string): boolean {
-  try {
-    runGit(cwd, ['rev-parse', '--git-dir'], 1024 * 128);
-    return true;
-  } catch {
-    return false;
-  }
+  return !!resolveTree(cwd, ref) || !!resolveCommit(cwd, ref);
 }
 
 function matchesKanbanTaskRef(text: string, taskId: string): boolean {
@@ -155,9 +142,28 @@ function readFileStats(ctx: ReviewDiffContext, filePath: string): Pick<ReviewFil
   return { additions, deletions, binary };
 }
 
+function resolveBaseRef(task: Task, cwd: string, compareRef: string | null, useLiveWorktree: boolean): string | null {
+  const savedBaseTree = resolveTree(cwd, task.base_tree);
+  if (savedBaseTree) return savedBaseTree;
+
+  const initialTree = resolveTree(cwd, task.initial_commit);
+  if (initialTree) return initialTree;
+
+  if (useLiveWorktree || !task.use_worktree) {
+    const headTree = resolveTree(cwd, 'HEAD');
+    if (headTree) return headTree;
+  }
+
+  const compareParent = getParentCommit(cwd, compareRef);
+  if (compareParent) return compareParent;
+
+  return resolveTree(cwd, 'HEAD');
+}
+
 function resolveReviewDiffContext(task: Task, project: { working_dir: string }, messageId?: string): ReviewDiffContext {
   const db = getDb();
-  const wt = findWorktreeByTask(project.working_dir, task.id);
+  const foundWorktree = findWorktreeByTask(project.working_dir, task.id);
+  const wt = foundWorktree && fs.existsSync(foundWorktree.path) ? foundWorktree : null;
   const branch = wt ? null : findBranchByTask(project.working_dir, task.id);
   const cwd = wt?.path || project.working_dir;
 
@@ -172,32 +178,29 @@ function resolveReviewDiffContext(task: Task, project: { working_dir: string }, 
       `).get(messageId, task.id) as { id: string; checkpoint_commit: string | null; timestamp: string } | undefined
     : undefined;
 
-  const previousReview = reviewMsg
-    ? db.prepare(`
-        SELECT checkpoint_commit FROM chat_messages
-        WHERE task_id = ? AND type = 'ai_review' AND timestamp < ? AND checkpoint_commit IS NOT NULL
-        ORDER BY timestamp DESC LIMIT 1
-      `).get(task.id, reviewMsg.timestamp) as { checkpoint_commit: string | null } | undefined
-    : undefined;
-
-  const requestedBase = previousReview?.checkpoint_commit || task.initial_commit || null;
-  const baseRef = requestedBase && refExists(cwd, requestedBase)
-    ? requestedBase
-    : (refExists(cwd, 'HEAD') ? 'HEAD' : null);
-
-  let compareRef: string | null = null;
-  let headLabel = wt ? '工作区' : 'HEAD';
   const checkpointCommit = reviewMsg?.checkpoint_commit || task.checkpoint_commit;
+  let compareRef: string | null = null;
+  let headLabel = '工作区';
+  const useLiveWorktree = !!wt || !task.use_worktree;
 
-  if (!wt) {
+  if (useLiveWorktree) {
+    compareRef = captureWorkingTree(cwd);
+  }
+
+  if (!compareRef) {
     if (checkpointCommit && refExists(cwd, checkpointCommit)) {
       compareRef = checkpointCommit;
       headLabel = checkpointCommit.slice(0, 8);
     } else if (branch && refExists(cwd, branch)) {
       compareRef = branch;
       headLabel = branch;
+    } else {
+      compareRef = captureWorkingTree(cwd);
+      headLabel = '工作区';
     }
   }
+
+  const baseRef = resolveBaseRef(task, cwd, compareRef, useLiveWorktree);
 
   return {
     cwd,
@@ -224,7 +227,7 @@ function listReviewChanges(ctx: ReviewDiffContext): ReviewFileChange[] {
 function readReviewFileContent(ctx: ReviewDiffContext, filePath: string): { content: string; source: string; truncated: boolean } {
   const currentPath = assertInsideDir(ctx.cwd, filePath);
   let content: string;
-  let source = ctx.compareRef || ctx.headLabel;
+  let source = ctx.headLabel;
 
   if (ctx.compareRef) {
     try {
@@ -340,7 +343,7 @@ tasksRouter.get('/:id/review-changes', (req: Request, res: Response) => {
     res.json({
       taskId: task.id,
       baseRef: ctx.baseRef,
-      headRef: ctx.compareRef || ctx.headLabel,
+      headRef: ctx.headLabel,
       worktreePath: ctx.worktreePath,
       summary,
       files,
@@ -386,7 +389,7 @@ tasksRouter.get('/:id/review-changes/file', (req: Request, res: Response) => {
       path: filePath,
       mode,
       content: truncated ? diff.slice(0, MAX_REVIEW_FILE_BYTES) : diff,
-      source: `${ctx.baseRef?.slice(0, 8) || 'HEAD'} -> ${ctx.compareRef || ctx.headLabel}`,
+      source: `${ctx.baseRef?.slice(0, 8) || 'HEAD'} -> ${ctx.headLabel}`,
       truncated,
     });
   } catch (e) {

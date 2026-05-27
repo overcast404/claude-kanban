@@ -1,8 +1,10 @@
+import { useCallback, useState } from 'react';
 import type { Project } from '../../../src/types';
 import type { ChatMessage } from '../App';
 import { ChatSidebar } from './ChatSidebar';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
+import { ReviewChangesPanel, type ReviewChangesTarget } from './ReviewChanges';
 
 interface ProjectWithCounts extends Project {
   count_pending: number;
@@ -42,6 +44,9 @@ interface Props {
 }
 
 export function ChatPanel(props: Props) {
+  const [reviewTarget, setReviewTarget] = useState<ReviewChangesTarget | null>(null);
+  const closeReviewPanel = useCallback(() => setReviewTarget(null), []);
+
   return (
     <div className="flex-1 flex min-w-0">
       <ChatSidebar
@@ -49,34 +54,44 @@ export function ChatPanel(props: Props) {
         onProjectClick={props.onProjectClick}
         gitStatuses={props.gitStatuses}
       />
-      <div className="flex-1 flex flex-col min-w-0">
-        <ChatMessageList
-          messages={props.messages}
-          runningTaskIds={props.runningTaskIds}
-          stoppedTaskIds={props.stoppedTaskIds}
-          doneTaskIds={props.doneTaskIds}
-          decidingTaskIds={props.decidingTaskIds}
-          reviewingTaskIds={props.reviewingTaskIds}
-          taskWorktrees={props.taskWorktrees}
-          hasMore={props.hasMore}
-          loadingMore={props.loadingMore}
-          onLoadMore={props.onLoadMore}
-          onDecisionClick={props.onDecisionClick}
-          onApprove={props.onApprove}
-          onReject={props.onReject}
-          onStopTask={props.onStopTask}
-          onQuoteReply={props.onQuoteReply}
-          onRewind={props.onRewind}
-          onFork={props.onFork}
-          onThreadOpen={props.onThreadOpen}
-        />
-        <ChatInput
-          projects={props.projects.map(p => ({ id: p.id, name: p.name }))}
-          quoteTarget={props.quoteTarget}
-          onCancelQuote={props.onCancelQuote}
-          onSend={props.onSend}
-          mentionPrefill={props.mentionPrefill}
-        />
+      <div className="flex flex-1 min-w-0 max-md:flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <ChatMessageList
+            messages={props.messages}
+            runningTaskIds={props.runningTaskIds}
+            stoppedTaskIds={props.stoppedTaskIds}
+            doneTaskIds={props.doneTaskIds}
+            decidingTaskIds={props.decidingTaskIds}
+            reviewingTaskIds={props.reviewingTaskIds}
+            taskWorktrees={props.taskWorktrees}
+            hasMore={props.hasMore}
+            loadingMore={props.loadingMore}
+            onLoadMore={props.onLoadMore}
+            onDecisionClick={props.onDecisionClick}
+            onApprove={props.onApprove}
+            onReject={props.onReject}
+            onStopTask={props.onStopTask}
+            onQuoteReply={props.onQuoteReply}
+            onRewind={props.onRewind}
+            onFork={props.onFork}
+            onThreadOpen={props.onThreadOpen}
+            onOpenReviewChanges={setReviewTarget}
+            activeReviewTarget={reviewTarget}
+          />
+          <ChatInput
+            projects={props.projects.map(p => ({ id: p.id, name: p.name }))}
+            quoteTarget={props.quoteTarget}
+            onCancelQuote={props.onCancelQuote}
+            onSend={props.onSend}
+            mentionPrefill={props.mentionPrefill}
+          />
+        </div>
+        {reviewTarget && (
+          <ReviewChangesPanel
+            target={reviewTarget}
+            onClose={closeReviewPanel}
+          />
+        )}
       </div>
     </div>
   );

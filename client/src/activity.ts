@@ -2,6 +2,23 @@ export interface ChunkParser {
   feed(text: string): string | null;
 }
 
+export interface ResultParser {
+  feed(text: string): string | null;
+}
+
+function parseResultLine(line: string): string | null {
+  try {
+    const obj = JSON.parse(line);
+    if (obj.type === 'result' && obj.subtype !== 'error_during_execution' && typeof obj.result === 'string') {
+      const result = obj.result.trim();
+      return result || null;
+    }
+  } catch {
+    // Ignore partial or non-JSON stream fragments.
+  }
+  return null;
+}
+
 function pickParam(input: Record<string, unknown> | undefined): string | null {
   if (!input) return null;
   // Pick the first meaningful string value from tool input
@@ -114,6 +131,36 @@ export function createChunkParser(): ChunkParser {
   }
 
   return { feed };
+}
+
+export function createResultParser(): ResultParser {
+  let buffer = '';
+
+  return {
+    feed(text: string): string | null {
+      buffer += text;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let latest: string | null = null;
+      for (const line of lines) {
+        const result = parseResultLine(line);
+        if (result) latest = result;
+      }
+
+      const bufferedResult = parseResultLine(buffer);
+      if (bufferedResult) {
+        latest = bufferedResult;
+        buffer = '';
+      }
+
+      if (buffer.length > 100_000) {
+        buffer = buffer.slice(-100_000);
+      }
+
+      return latest;
+    },
+  };
 }
 
 /** Stateless parse for one-shot use. */

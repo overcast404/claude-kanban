@@ -13,6 +13,13 @@ type ViewMode = 'diff' | 'content';
 interface Props {
   taskId: string;
   messageId: string;
+  active?: boolean;
+  onOpenPanel: (target: ReviewChangesTarget) => void;
+}
+
+export interface ReviewChangesTarget {
+  taskId: string;
+  messageId: string;
 }
 
 function statusLabel(status: string): string {
@@ -54,7 +61,7 @@ function CodeViewer({ file, mode }: { file: ReviewFileResponse; mode: ViewMode }
         <span className="min-w-0 truncate">{file.source}</span>
         {file.truncated && <span className="shrink-0 text-amber-700">已截断</span>}
       </div>
-      <pre className="max-h-[52vh] overflow-auto bg-white py-2 font-mono text-[10px] leading-relaxed">
+      <pre className="max-h-[42dvh] overflow-auto bg-white py-2 font-mono text-[10px] leading-relaxed md:max-h-[calc(100vh-150px)]">
         {lines.map((line, index) => (
           <code key={index} className={`block min-w-max px-3 py-0.5 ${lineClass(line, mode)}`}>
             {line || ' '}
@@ -100,8 +107,74 @@ function FileRow({
   );
 }
 
-export function ReviewChanges({ taskId, messageId }: Props) {
-  const [expanded, setExpanded] = useState(false);
+export function ReviewChanges({ taskId, messageId, active, onOpenPanel }: Props) {
+  const [changes, setChanges] = useState<ReviewChangesResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setChanges(null);
+
+    fetchTaskReviewChanges(taskId, messageId)
+      .then(data => {
+        if (!cancelled) setChanges(data);
+      })
+      .catch(err => {
+        if (!cancelled) setError((err as Error).message || '无法读取变更');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [taskId, messageId]);
+
+  const summary = changes?.summary || { files: 0, additions: 0, deletions: 0 };
+
+  if (loading) {
+    return (
+      <div className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg border border-warm-border bg-white px-3 text-[11px] text-warm-text-secondary md:min-h-7">
+        <Icon name="git-branch" size={12} />
+        变更统计...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mt-2 rounded-lg border border-warm-border bg-white px-3 py-2 text-[11px] text-warm-text-secondary">
+        无法读取变更：{error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 min-w-0">
+      <button
+        type="button"
+        aria-expanded={active}
+        onClick={() => onOpenPanel({ taskId, messageId })}
+        className={`inline-flex min-h-11 max-w-full cursor-pointer items-center gap-2 rounded-lg border px-3 text-[11px] font-semibold text-warm-text transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan max-md:w-full md:min-h-7 ${
+          active
+            ? 'border-warm-brown bg-warm-bg'
+            : 'border-warm-border bg-white hover:border-warm-tan hover:bg-warm-bg'
+        }`}
+      >
+        <Icon name="git-branch" size={12} className="shrink-0 text-warm-brown" />
+        <span className="font-mono text-emerald-700">+{summary.additions}</span>
+        <span className="font-mono text-red-600">-{summary.deletions}</span>
+        <span className="min-w-0 truncate text-warm-text-secondary">{summary.files} 个文件</span>
+        <Icon name="chevron-right" size={12} className="ml-auto shrink-0" />
+      </button>
+    </div>
+  );
+}
+
+export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesTarget; onClose: () => void }) {
+  const { taskId, messageId } = target;
   const [changes, setChanges] = useState<ReviewChangesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +194,10 @@ export function ReviewChanges({ taskId, messageId }: Props) {
 
     fetchTaskReviewChanges(taskId, messageId)
       .then(data => {
-        if (!cancelled) setChanges(data);
+        if (!cancelled) {
+          setChanges(data);
+          setSelectedPath(data.files[0]?.path || null);
+        }
       })
       .catch(err => {
         if (!cancelled) setError((err as Error).message || '无法读取变更');
@@ -132,6 +208,15 @@ export function ReviewChanges({ taskId, messageId }: Props) {
 
     return () => { cancelled = true; };
   }, [taskId, messageId]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
 
   const selectedFile = useMemo(() => {
     return changes?.files.find(item => item.path === selectedPath) || null;
@@ -165,43 +250,52 @@ export function ReviewChanges({ taskId, messageId }: Props) {
 
   const summary = changes?.summary || { files: 0, additions: 0, deletions: 0 };
 
-  if (loading) {
-    return (
-      <div className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg border border-warm-border bg-white px-3 text-[11px] text-warm-text-secondary md:min-h-7">
-        <Icon name="git-branch" size={12} />
-        变更统计...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="mt-2 rounded-lg border border-warm-border bg-white px-3 py-2 text-[11px] text-warm-text-secondary">
-        无法读取变更：{error}
-      </div>
-    );
-  }
-
   return (
-    <div className="mt-2 min-w-0">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded(value => !value)}
-        className="inline-flex min-h-11 max-w-full cursor-pointer items-center gap-2 rounded-lg border border-warm-border bg-white px-3 text-[11px] font-semibold text-warm-text transition-colors duration-200 hover:border-warm-tan hover:bg-warm-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan max-md:w-full md:min-h-7"
-      >
-        <Icon name="git-branch" size={12} className="shrink-0 text-warm-brown" />
-        <span className="font-mono text-emerald-700">+{summary.additions}</span>
-        <span className="font-mono text-red-600">-{summary.deletions}</span>
-        <span className="min-w-0 truncate text-warm-text-secondary">{summary.files} 个文件</span>
-        <Icon name="chevron-down" size={12} className={`ml-auto shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-      </button>
+    <aside className="flex min-h-0 shrink-0 flex-col overflow-hidden border-t border-warm-border bg-warm-log-bg max-md:h-[42dvh] md:h-full md:w-[min(680px,42vw)] md:border-l md:border-t-0">
+      <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-warm-border bg-white px-4">
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-warm-text">本次任务变更</div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-warm-text-secondary">
+            {loading ? (
+              <span>变更统计...</span>
+            ) : error ? (
+              <span className="text-red-600">无法读取变更</span>
+            ) : (
+              <>
+                <span className="font-mono text-emerald-700">+{summary.additions}</span>
+                <span className="font-mono text-red-600">-{summary.deletions}</span>
+                <span className="truncate">{summary.files} 个文件</span>
+              </>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-label="关闭变更面板"
+          onClick={onClose}
+          className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-warm-text-secondary transition-colors duration-200 hover:bg-warm-bg hover:text-warm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan"
+        >
+          <Icon name="x" size={16} />
+        </button>
+      </div>
 
-      {expanded && (
-        <div className="mt-2 max-h-[72vh] min-w-0 overflow-y-auto rounded-xl border border-warm-border bg-warm-log-bg p-2">
-          {changes && changes.files.length > 0 ? (
-            <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(210px,280px)_minmax(0,1fr)]">
-              <div className="min-w-0 space-y-1.5">
+      {loading && (
+        <div className="flex flex-1 items-center justify-center px-3 text-[12px] text-warm-text-secondary">
+          加载变更...
+        </div>
+      )}
+
+      {error && (
+        <div className="m-3 rounded-lg border border-warm-border bg-white px-3 py-4 text-[11px] text-warm-text-secondary">
+          无法读取变更：{error}
+        </div>
+      )}
+
+      {!loading && !error && changes && (
+        changes.files.length > 0 ? (
+          <div className="grid min-h-0 flex-1 gap-0 md:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="min-h-0 border-b border-warm-border bg-white p-2 md:border-b-0 md:border-r">
+              <div className="max-h-[11dvh] min-w-0 space-y-1.5 overflow-y-auto pr-1 md:h-full md:max-h-none">
                 {changes.files.map(item => (
                   <FileRow
                     key={`${item.status}:${item.path}`}
@@ -214,62 +308,62 @@ export function ReviewChanges({ taskId, messageId }: Props) {
                   />
                 ))}
               </div>
+            </div>
 
-              <div className="min-w-0">
-                {selectedFile ? (
-                  <div className="min-w-0 space-y-2">
-                    <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div className="min-w-0 truncate text-[11px] font-semibold text-warm-text" title={selectedFile.path}>
-                        {selectedFile.path}
-                      </div>
-                      <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-warm-border bg-white text-[11px] font-semibold md:flex">
-                        <button
-                          type="button"
-                          onClick={() => setViewMode('diff')}
-                          className={`min-h-9 px-3 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan ${
-                            viewMode === 'diff' ? 'bg-warm-brown text-white' : 'text-warm-text-secondary hover:bg-warm-bg'
-                          }`}
-                        >
-                          对比
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setViewMode('content')}
-                          className={`min-h-9 border-l border-warm-border px-3 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan ${
-                            viewMode === 'content' ? 'bg-warm-brown text-white' : 'text-warm-text-secondary hover:bg-warm-bg'
-                          }`}
-                        >
-                          文件
-                        </button>
-                      </div>
+            <div className="min-h-0 min-w-0 overflow-y-auto p-3">
+              {selectedFile ? (
+                <div className="min-w-0 space-y-2">
+                  <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0 truncate text-[12px] font-semibold text-warm-text" title={selectedFile.path}>
+                      {selectedFile.path}
                     </div>
+                    <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-warm-border bg-white text-[11px] font-semibold md:flex">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('diff')}
+                        className={`min-h-10 cursor-pointer px-3 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan md:min-h-9 ${
+                          viewMode === 'diff' ? 'bg-warm-brown text-white' : 'text-warm-text-secondary hover:bg-warm-bg'
+                        }`}
+                      >
+                        对比
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('content')}
+                        className={`min-h-10 cursor-pointer border-l border-warm-border px-3 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan md:min-h-9 ${
+                          viewMode === 'content' ? 'bg-warm-brown text-white' : 'text-warm-text-secondary hover:bg-warm-bg'
+                        }`}
+                      >
+                        文件
+                      </button>
+                    </div>
+                  </div>
 
-                    {fileLoading && (
-                      <div className="rounded-lg border border-warm-border bg-white px-3 py-8 text-center text-[11px] text-warm-text-secondary">
-                        加载文件...
-                      </div>
-                    )}
-                    {fileError && (
-                      <div className="rounded-lg border border-warm-border bg-white px-3 py-4 text-[11px] text-warm-text-secondary">
-                        {fileError}
-                      </div>
-                    )}
-                    {file && <CodeViewer file={file} mode={viewMode} />}
-                  </div>
-                ) : (
-                  <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-warm-border bg-white px-3 py-6 text-center text-[11px] text-warm-text-secondary">
-                    点击左侧文件查看对比或文件内容
-                  </div>
-                )}
-              </div>
+                  {fileLoading && (
+                    <div className="rounded-lg border border-warm-border bg-white px-3 py-8 text-center text-[11px] text-warm-text-secondary">
+                      加载文件...
+                    </div>
+                  )}
+                  {fileError && (
+                    <div className="rounded-lg border border-warm-border bg-white px-3 py-4 text-[11px] text-warm-text-secondary">
+                      {fileError}
+                    </div>
+                  )}
+                  {file && <CodeViewer file={file} mode={viewMode} />}
+                </div>
+              ) : (
+                <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-warm-border bg-white px-3 py-6 text-center text-[11px] text-warm-text-secondary">
+                  点击文件查看对比或文件内容
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-warm-border bg-white px-3 py-4 text-[11px] text-warm-text-secondary">
-              暂无文件变更
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="m-3 rounded-lg border border-dashed border-warm-border bg-white px-3 py-4 text-[11px] text-warm-text-secondary">
+            暂无文件变更
+          </div>
+        )
       )}
-    </div>
+    </aside>
   );
 }

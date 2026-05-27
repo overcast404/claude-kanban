@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useMemo, useLayoutEffect, useState } fr
 import type { ChatMessage } from '../App';
 import { ChatBubble } from './ChatBubble';
 import { Icon } from './Icon';
+import type { ReviewChangesTarget } from './ReviewChanges';
 
 interface Props {
   messages: ChatMessage[];
@@ -22,6 +23,8 @@ interface Props {
   onRewind: (msg: ChatMessage) => void;
   onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
   onThreadOpen: (taskId: string) => void;
+  onOpenReviewChanges: (target: ReviewChangesTarget) => void;
+  activeReviewTarget: ReviewChangesTarget | null;
 }
 
 type PendingDirection = 'up' | 'down';
@@ -74,7 +77,7 @@ function PendingBubbleNavigator({
   );
 }
 
-export function ChatMessageList({ messages, runningTaskIds, stoppedTaskIds, doneTaskIds, decidingTaskIds, reviewingTaskIds, taskWorktrees, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
+export function ChatMessageList({ messages, runningTaskIds, stoppedTaskIds, doneTaskIds, decidingTaskIds, reviewingTaskIds, taskWorktrees, hasMore, loadingMore, onLoadMore, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen, onOpenReviewChanges, activeReviewTarget }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
@@ -105,13 +108,13 @@ export function ChatMessageList({ messages, runningTaskIds, stoppedTaskIds, done
 
   const latestExecutionMsgIds = useMemo(() => {
     const ids = new Set<string>();
-    const lastPerTask = new Map<string, string>();
+    const firstPerTask = new Map<string, string>();
     for (const msg of messages) {
-      if (msg.type === 'ai_execution') {
-        lastPerTask.set(msg.taskId, msg.id);
+      if (msg.type === 'ai_execution' && !firstPerTask.has(msg.taskId)) {
+        firstPerTask.set(msg.taskId, msg.id);
       }
     }
-    for (const id of lastPerTask.values()) {
+    for (const id of firstPerTask.values()) {
       ids.add(id);
     }
     return ids;
@@ -387,6 +390,8 @@ export function ChatMessageList({ messages, runningTaskIds, stoppedTaskIds, done
               onRewind={onRewind}
               onFork={onFork}
               onThreadOpen={onThreadOpen}
+              onOpenReviewChanges={onOpenReviewChanges}
+              activeReviewTarget={activeReviewTarget}
             />
           </div>
         ))}

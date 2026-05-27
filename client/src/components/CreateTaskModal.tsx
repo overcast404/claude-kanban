@@ -11,7 +11,7 @@ interface Props {
 export function CreateTaskModal({ projects, onClose, onCreated }: Props) {
   const [projectId, setProjectId] = useState(projects[0]?.id || '');
   const [description, setDescription] = useState('');
-  const [useWorktree, setUseWorktree] = useState(true);
+  const [useWorktree, setUseWorktree] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleCreate = async (start: boolean) => {

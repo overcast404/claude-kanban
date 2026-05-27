@@ -3,7 +3,8 @@ import { getDb } from '../db';
 import { broadcast } from '../broadcast';
 import { findWorktreeByTask, getRecentOutput } from '../services/session-manager';
 import { v4 as uuid } from 'uuid';
-import { execFileSync } from 'child_process';
+import fs from 'fs';
+import { resolveCommit } from '../services/git-snapshot';
 
 export const hooksRouter = Router();
 
@@ -64,10 +65,8 @@ hooksRouter.post('/:taskId', (req: Request, res: Response) => {
     if (project) {
       try {
         const wt = findWorktreeByTask(project.working_dir, taskId);
-        const cwd = wt?.path || project.working_dir;
-        checkpointCommit = execFileSync('git', ['-C', cwd, 'rev-parse', 'HEAD'], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        }).toString('utf8').trim();
+        const cwd = wt && fs.existsSync(wt.path) ? wt.path : project.working_dir;
+        checkpointCommit = resolveCommit(cwd, 'HEAD');
       } catch (e) {
         console.error(`[Hooks] Failed to capture checkpoint for task ${taskId}:`, (e as Error).message);
       }

@@ -16,7 +16,7 @@ export function ChatInput({ projects, quoteTarget, onCancelQuote, onSend, mentio
   const [showMention, setShowMention] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [useWorktree, setUseWorktree] = useState(true);
+  const [useWorktree, setUseWorktree] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const isReply = quoteTarget?.type === 'ai_review' || quoteTarget?.type === 'ai_decision' || quoteTarget?.type === 'ai_execution';

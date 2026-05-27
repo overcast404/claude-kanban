@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ChatMessage } from '../App';
 import { Icon } from './Icon';
 import MarkdownContent from './MarkdownContent';
-import { ReviewChanges } from './ReviewChanges';
+import { ReviewChanges, type ReviewChangesTarget } from './ReviewChanges';
 
 interface Props {
   message: ChatMessage;
@@ -22,6 +22,8 @@ interface Props {
   onRewind: (msg: ChatMessage) => void;
   onFork: (msg: ChatMessage, mode: 'fork' | 'fork-rewind') => void;
   onThreadOpen: (taskId: string) => void;
+  onOpenReviewChanges: (target: ReviewChangesTarget) => void;
+  activeReviewTarget: ReviewChangesTarget | null;
 }
 
 function QuoteReplyButton({ side, onClick }: { side: 'left' | 'right'; onClick: () => void }) {
@@ -92,7 +94,7 @@ function ForkMenu({ onRewind, onFork, isDone }: { onRewind: () => void; onFork: 
   );
 }
 
-export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskStopped, isTaskDone, isTaskReviewing, isLatestReview, isLatestExecution, worktree, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen }: Props) {
+export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskStopped, isTaskDone, isTaskReviewing, isLatestReview, isLatestExecution, worktree, onDecisionClick, onApprove, onReject, onStopTask, onQuoteReply, onRewind, onFork, onThreadOpen, onOpenReviewChanges, activeReviewTarget }: Props) {
   const { type, projectName, content, round } = message;
   const [customOpen, setCustomOpen] = useState(false);
   const [customText, setCustomText] = useState('');
@@ -320,7 +322,12 @@ export function ChatBubble({ message, getQuotedMessage, isTaskRunning, isTaskSto
           <>
             <div className="mb-2"><MarkdownContent>{content}</MarkdownContent></div>
             {isLatestReview && (
-              <ReviewChanges taskId={message.taskId} messageId={message.id} />
+              <ReviewChanges
+                taskId={message.taskId}
+                messageId={message.id}
+                active={activeReviewTarget?.taskId === message.taskId && activeReviewTarget?.messageId === message.id}
+                onOpenPanel={onOpenReviewChanges}
+              />
             )}
             {showReviewActions && (
               <div className="mt-2 flex gap-2">
