@@ -638,7 +638,7 @@ tasksRouter.post('/:id/reject', (req: Request, res: Response) => {
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get((task as Task).project_id) as any;
   if (project) {
-    resumeSession(req.params.id, project.working_dir, feedback || '请根据反馈修改，完成后调用 mark_complete。').catch(console.error);
+    resumeSession(req.params.id, project.working_dir, feedback || '请根据反馈修改，完成后给出简短总结并结束。').catch(console.error);
   }
 
   res.json({ task, feedback });

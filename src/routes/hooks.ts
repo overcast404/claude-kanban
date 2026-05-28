@@ -1,10 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db';
 import { broadcast } from '../broadcast';
-import { findWorktreeByTask, getRecentOutput } from '../services/session-manager';
+import { getRecentOutput } from '../services/session-manager';
 import { v4 as uuid } from 'uuid';
-import fs from 'fs';
-import { resolveCommit } from '../services/git-snapshot';
 
 export const hooksRouter = Router();
 
@@ -49,39 +47,6 @@ hooksRouter.post('/:taskId', (req: Request, res: Response) => {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
         permissionDecisionReason: 'Decision will be collected via Claude Kanban dashboard',
-      },
-    });
-  }
-
-  // Handle mark_complete MCP call
-  if (hookEventName === 'PreToolUse' && toolName === 'mcp__manager__mark_complete') {
-    const summary = hookBody.tool_input?.summary || '';
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as { project_id: string } | undefined;
-    const project = task
-      ? db.prepare('SELECT * FROM projects WHERE id = ?').get(task.project_id) as { working_dir: string } | undefined
-      : undefined;
-    let checkpointCommit: string | null = null;
-
-    if (project) {
-      try {
-        const wt = findWorktreeByTask(project.working_dir, taskId);
-        const cwd = wt && fs.existsSync(wt.path) ? wt.path : project.working_dir;
-        checkpointCommit = resolveCommit(cwd, 'HEAD');
-      } catch (e) {
-        console.error(`[Hooks] Failed to capture checkpoint for task ${taskId}:`, (e as Error).message);
-      }
-    }
-
-    db.prepare(`UPDATE tasks SET status = 'reviewing', summary = ?, checkpoint_commit = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(summary, checkpointCommit, taskId);
-
-    const updatedTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
-    broadcast({ type: 'task_updated', payload: updatedTask });
-
-    return res.json({
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'allow',
       },
     });
   }

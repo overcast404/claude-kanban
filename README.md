@@ -75,19 +75,17 @@ pending → running → deciding → running → reviewing → done
 
 - **钩子配置**（`hooks/<taskId>.json`）— 拦截 Claude 的关键行为
 - **协议约束**（`<taskId>-protocol.md`）— 告诉 Claude 何时必须提问、何时提交结果
-- **MCP 连接**（`<taskId>-mcp.json`）— 提供 `mark_complete` 工具供 Claude 调用
 
 ### 钩子拦截
 
 | 事件 | 行为 |
 |---|---|
 | `AskUserQuestion` | 阻止 Claude 直接提问，转为 Decision 记录，由你在 UI 中回答 |
-| `mark_complete` | 允许调用，任务自动进入 reviewing 状态 |
 | `PermissionRequest` | 自动批准（读写文件、执行命令等操作） |
 
-### 强制修正
+### 完成识别
 
-如果 Claude 进程在未发出任何信号的情况下退出（如崩溃、OOM），系统会立即重启会话，并通过协议文本提示 Claude："你上次没有明确结束就退出了，请使用 AskUserQuestion 或 mark_complete 表明你的意图"。
+如果 Claude 没有触发 `AskUserQuestion`，进程结束后系统会将任务进入 `reviewing`，由你在 UI 中验收。
 
 ## 命令行
 
