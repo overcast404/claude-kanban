@@ -230,11 +230,9 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
 
   const hooksConfigPath = path.join(hooksDir, `${task.id}.json`);
   const protocolPath = path.join(hooksDir, `${task.id}-protocol.md`);
-  const mcpConfigPath = path.join(hooksDir, `${task.id}-mcp.json`);
 
   writeHooksConfig(hooksConfigPath, task.id);
   writeProtocolFile(protocolPath);
-  writeMcpConfig(mcpConfigPath);
 
   const projectIsGitRepo = isGitRepoPath(workingDir);
   const useWorktree = !!task.use_worktree && projectIsGitRepo;
@@ -272,8 +270,6 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     '--verbose',
     '--permission-mode', 'bypassPermissions',
     '--settings', hooksConfigPath,
-    '--mcp-config', mcpConfigPath,
-    '--strict-mcp-config',
     '--append-system-prompt-file', protocolPath,
   ];
 
@@ -354,7 +350,6 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
 
     try { fs.unlinkSync(hooksConfigPath); } catch {}
     try { fs.unlinkSync(protocolPath); } catch {}
-    try { fs.unlinkSync(mcpConfigPath); } catch {}
   });
 
   proc.on('error', (err) => {
@@ -612,11 +607,9 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
 
   const hooksConfigPath = path.join(hooksDir, `${task.id}.json`);
   const protocolPath = path.join(hooksDir, `${task.id}-protocol.md`);
-  const mcpConfigPath = path.join(hooksDir, `${task.id}-mcp.json`);
 
   writeHooksConfig(hooksConfigPath, task.id);
   writeProtocolFile(protocolPath);
-  writeMcpConfig(mcpConfigPath);
 
   const args = [
     '-p', injectMessage,
@@ -625,8 +618,6 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     '--verbose',
     '--permission-mode', 'bypassPermissions',
     '--settings', hooksConfigPath,
-    '--mcp-config', mcpConfigPath,
-    '--strict-mcp-config',
     '--append-system-prompt-file', protocolPath,
   ];
 
@@ -712,7 +703,6 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
 
     try { fs.unlinkSync(hooksConfigPath); } catch {}
     try { fs.unlinkSync(protocolPath); } catch {}
-    try { fs.unlinkSync(mcpConfigPath); } catch {}
   });
 }
 
@@ -729,14 +719,6 @@ function writeHooksConfig(filePath: string, taskId: string): void {
       PreToolUse: [
         {
           matcher: 'AskUserQuestion',
-          hooks: [{
-            type: 'http' as const,
-            url: hookUrl,
-            timeout: 10000,
-          }],
-        },
-        {
-          matcher: 'mcp__manager__mark_complete',
           hooks: [{
             type: 'http' as const,
             url: hookUrl,
@@ -771,9 +753,8 @@ You are working on a task managed by Claude Kanban. Follow these critical rules:
 - If you output text before the question (analysis, options, reasoning), that is fine — it will be shown to the user as context before they answer.
 
 ## Completion Protocol
-- When the task is complete, you **MUST call** the MCP tool: **mcp__manager__mark_complete(summary)**
-- **NEVER** just output text saying you're done. Always call mcp__manager__mark_complete.
-- The summary should concisely describe what was accomplished.
+- When the task is complete, provide a concise summary of what was accomplished, then finish normally.
+- Do not ask the user to approve the work in plain text. If you need a decision before finishing, use AskUserQuestion.
 
 ## Stop Protocol
 - You may receive SIGINT (external stop) at any time. When this happens, your session state is automatically saved.
@@ -785,19 +766,7 @@ You are working on a task managed by Claude Kanban. Follow these critical rules:
 - If a tool is blocked, report it in your summary instead.
 
 ## Important
-- At the end of EACH turn, either you are asking a question (via AskUserQuestion), you are done (via mcp__manager__mark_complete), or you may be stopped externally (SIGINT).
+- At the end of EACH turn, either you are asking a question (via AskUserQuestion), you are done and can finish normally, or you may be stopped externally (SIGINT).
 `;
   fs.writeFileSync(filePath, protocol);
-}
-
-function writeMcpConfig(filePath: string): void {
-  const config = {
-    mcpServers: {
-      manager: {
-        type: 'http' as const,
-        url: `http://localhost:${getManagerPort()}/mcp/sse`,
-      },
-    },
-  };
-  fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
 }

@@ -37,16 +37,16 @@ client/                 # React 18 + Vite 5 + Tailwind 4
 
 ```
 pending → running → deciding（Claude 提问）→ running（用户决策后恢复）
-                 → reviewing（Claude 调用 mark_complete）→ done（用户验收通过）
+                 → reviewing（Claude 完成并退出）→ done（用户验收通过）
 ```
 
 ### 会话编排 (session-manager.ts)
 
 - spawn claude CLI 子进程，无并发上限
-- 每个会话动态生成三份配置到 dataDir: `hooks/<taskId>.json`（钩子配置）、`-protocol.md`（协议约束）、`-mcp.json`（MCP 连接）
-- 协议约束：Claude 停止时必须通过 AskUserQuestion（需决策）或 mark_complete（已完成）发信号
-- 进程无信号退出时自动恢复并提示意图
-- 钩子拦截：AskUserQuestion → 阻止并记入 Decision；mark_complete → 允许，任务进入 reviewing；PermissionRequest → 自动批准
+- 每个会话动态生成两份配置到 dataDir: `hooks/<taskId>.json`（钩子配置）、`-protocol.md`（协议约束）
+- 协议约束：Claude 需要用户决策时必须通过 AskUserQuestion；完成时正常输出总结并退出
+- 进程结束后，如果没有进入 deciding/stopped 等状态，自动进入 reviewing
+- 钩子拦截：AskUserQuestion → 阻止并记入 Decision；PermissionRequest → 自动批准
 
 ### WebSocket 广播
 
