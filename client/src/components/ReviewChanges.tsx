@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchTaskReviewChanges,
   fetchTaskReviewFile,
@@ -7,8 +7,9 @@ import {
   type ReviewFileResponse,
 } from '../api';
 import { Icon } from './Icon';
+import MarkdownContent from './MarkdownContent';
 
-type ViewMode = 'diff' | 'content';
+type ViewMode = 'diff' | 'content' | 'preview';
 
 interface Props {
   taskId: string;
@@ -43,7 +44,7 @@ function statusClass(status: string): string {
 }
 
 function lineClass(line: string, mode: ViewMode): string {
-  if (mode === 'content') return 'text-warm-text';
+  if (mode === 'content' || mode === 'preview') return 'text-warm-text';
   if (line.startsWith('+++') || line.startsWith('---')) return 'text-warm-text-secondary bg-gray-50';
   if (line.startsWith('+')) return 'text-emerald-800 bg-emerald-50';
   if (line.startsWith('-')) return 'text-red-800 bg-red-50';
@@ -61,7 +62,7 @@ function CodeViewer({ file, mode }: { file: ReviewFileResponse; mode: ViewMode }
         <span className="min-w-0 truncate">{file.source}</span>
         {file.truncated && <span className="shrink-0 text-amber-700">已截断</span>}
       </div>
-      <pre className="max-h-[42dvh] overflow-auto bg-white py-2 font-mono text-[10px] leading-relaxed md:max-h-[calc(100vh-150px)]">
+      <pre className="max-h-[calc(100dvh-260px)] overflow-auto bg-white py-2 font-mono text-[10px] leading-relaxed md:max-h-[calc(100vh-150px)]">
         {lines.map((line, index) => (
           <code key={index} className={`block min-w-max px-3 py-0.5 ${lineClass(line, mode)}`}>
             {line || ' '}
@@ -70,6 +71,24 @@ function CodeViewer({ file, mode }: { file: ReviewFileResponse; mode: ViewMode }
       </pre>
     </div>
   );
+}
+
+function MarkdownViewer({ file }: { file: ReviewFileResponse }) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-lg border border-warm-border bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-warm-border px-3 py-2 text-[10px] text-warm-text-secondary">
+        <span className="min-w-0 truncate">{file.source}</span>
+        {file.truncated && <span className="shrink-0 text-amber-700">已截断</span>}
+      </div>
+      <div className="max-h-[calc(100dvh-260px)] overflow-auto px-4 py-3 md:max-h-[calc(100vh-150px)]">
+        <MarkdownContent>{file.content || '无内容'}</MarkdownContent>
+      </div>
+    </div>
+  );
+}
+
+function isMarkdownPath(filePath: string): boolean {
+  return /\.(md|markdown|mdown|mkdn)$/i.test(filePath);
 }
 
 function FileRow({
@@ -175,6 +194,14 @@ export function ReviewChanges({ taskId, messageId, active, onOpenPanel }: Props)
 
 export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesTarget; onClose: () => void }) {
   const { taskId, messageId } = target;
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem('ck_review_panel_width') || '');
+      return Number.isFinite(stored) && stored >= 360 ? stored : 680;
+    } catch {
+      return 680;
+    }
+  });
   const [changes, setChanges] = useState<ReviewChangesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -183,6 +210,58 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
   const [file, setFile] = useState<ReviewFileResponse | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const resizingRef = useRef(false);
+
+  const updatePanelWidth = (clientX: number) => {
+    const nextWidth = window.innerWidth - clientX;
+    const maxWidth = Math.min(1280, Math.max(520, window.innerWidth - 320));
+    setPanelWidth(Math.min(maxWidth, Math.max(360, nextWidth)));
+  };
+
+  const beginResize = (clientX: number) => {
+    if (window.matchMedia('(max-width: 768px)').matches) return;
+    resizingRef.current = true;
+    updatePanelWidth(clientX);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  useEffect(() => {
+    try { localStorage.setItem('ck_review_panel_width', String(panelWidth)); } catch {}
+  }, [panelWidth]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!resizingRef.current) return;
+      updatePanelWidth(event.clientX);
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!resizingRef.current) return;
+      updatePanelWidth(event.clientX);
+    };
+
+    const endResize = () => {
+      if (!resizingRef.current) return;
+      resizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', endResize);
+    document.addEventListener('pointercancel', endResize);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', endResize);
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', endResize);
+      document.removeEventListener('pointercancel', endResize);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', endResize);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +270,7 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
     setChanges(null);
     setSelectedPath(null);
     setViewMode('diff');
+    setMobileDetailOpen(false);
 
     fetchTaskReviewChanges(taskId, messageId)
       .then(data => {
@@ -222,6 +302,14 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
     return changes?.files.find(item => item.path === selectedPath) || null;
   }, [changes, selectedPath]);
 
+  const selectedIsMarkdown = !!selectedFile && isMarkdownPath(selectedFile.path);
+
+  useEffect(() => {
+    if (viewMode === 'preview' && !selectedIsMarkdown) {
+      setViewMode('content');
+    }
+  }, [selectedIsMarkdown, viewMode]);
+
   useEffect(() => {
     if (!selectedPath) {
       setFile(null);
@@ -234,7 +322,9 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
     setFileError(null);
     setFile(null);
 
-    fetchTaskReviewFile(taskId, selectedPath, viewMode, messageId)
+    const fetchMode = viewMode === 'preview' ? 'content' : viewMode;
+
+    fetchTaskReviewFile(taskId, selectedPath, fetchMode, messageId)
       .then(data => {
         if (!cancelled) setFile(data);
       })
@@ -250,8 +340,35 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
 
   const summary = changes?.summary || { files: 0, additions: 0, deletions: 0 };
 
+  const openFile = (path: string) => {
+    setSelectedPath(path);
+    setViewMode('diff');
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      setMobileDetailOpen(true);
+    }
+  };
+
   return (
-    <aside className="flex min-h-0 shrink-0 flex-col overflow-hidden border-t border-warm-border bg-warm-log-bg max-md:h-[42dvh] md:h-full md:w-[min(680px,42vw)] md:border-l md:border-t-0">
+    <aside
+      className="fixed inset-0 z-40 flex h-dvh w-screen min-h-0 flex-col overflow-hidden border-warm-border bg-warm-log-bg md:relative md:inset-auto md:z-auto md:h-full md:w-[min(var(--review-panel-width),calc(100vw_-_320px))] md:shrink-0 md:border-l"
+      style={{ '--review-panel-width': `${panelWidth}px` } as CSSProperties}
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        title="拖动调整宽度"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          beginResize(event.clientX);
+        }}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          beginResize(event.clientX);
+        }}
+        className="absolute left-0 top-0 z-20 hidden h-full w-2 -translate-x-1/2 cursor-col-resize touch-none transition-colors duration-200 hover:bg-warm-tan/20 md:block"
+      >
+        <span className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-transparent transition-colors duration-200" />
+      </div>
       <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-warm-border bg-white px-4">
         <div className="min-w-0">
           <div className="text-[13px] font-semibold text-warm-text">本次任务变更</div>
@@ -293,31 +410,36 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
 
       {!loading && !error && changes && (
         changes.files.length > 0 ? (
-          <div className="grid min-h-0 flex-1 gap-0 md:grid-cols-[240px_minmax(0,1fr)]">
-            <div className="min-h-0 border-b border-warm-border bg-white p-2 md:border-b-0 md:border-r">
-              <div className="max-h-[11dvh] min-w-0 space-y-1.5 overflow-y-auto pr-1 md:h-full md:max-h-none">
+          <div className="grid min-h-0 flex-1 gap-0 md:grid-cols-[minmax(190px,34%)_minmax(0,1fr)]">
+            <div className={`${mobileDetailOpen ? 'hidden' : 'block'} min-h-0 border-b border-warm-border bg-white p-2 md:block md:border-b-0 md:border-r`}>
+              <div className="h-full min-w-0 space-y-1.5 overflow-y-auto pr-1">
                 {changes.files.map(item => (
                   <FileRow
                     key={`${item.status}:${item.path}`}
                     file={item}
                     selected={item.path === selectedPath}
-                    onClick={() => {
-                      setSelectedPath(item.path);
-                      setViewMode('diff');
-                    }}
+                    onClick={() => openFile(item.path)}
                   />
                 ))}
               </div>
             </div>
 
-            <div className="min-h-0 min-w-0 overflow-y-auto p-3">
+            <div className={`${mobileDetailOpen ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col overflow-hidden p-3 md:flex md:overflow-y-auto`}>
               {selectedFile ? (
-                <div className="min-w-0 space-y-2">
+                <div className="flex min-h-0 min-w-0 flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMobileDetailOpen(false)}
+                    className="inline-flex min-h-10 w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-warm-border bg-white px-3 text-[12px] font-medium text-warm-text-secondary transition-colors duration-200 hover:bg-warm-bg hover:text-warm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan md:hidden"
+                  >
+                    <Icon name="arrow-left" size={14} />
+                    文件列表
+                  </button>
                   <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0 truncate text-[12px] font-semibold text-warm-text" title={selectedFile.path}>
                       {selectedFile.path}
                     </div>
-                    <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-warm-border bg-white text-[11px] font-semibold md:flex">
+                    <div className={`grid ${selectedIsMarkdown ? 'grid-cols-3' : 'grid-cols-2'} overflow-hidden rounded-lg border border-warm-border bg-white text-[11px] font-semibold md:flex`}>
                       <button
                         type="button"
                         onClick={() => setViewMode('diff')}
@@ -336,6 +458,17 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
                       >
                         文件
                       </button>
+                      {selectedIsMarkdown && (
+                        <button
+                          type="button"
+                          onClick={() => setViewMode('preview')}
+                          className={`min-h-10 cursor-pointer border-l border-warm-border px-3 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-tan md:min-h-9 ${
+                            viewMode === 'preview' ? 'bg-warm-brown text-white' : 'text-warm-text-secondary hover:bg-warm-bg'
+                          }`}
+                        >
+                          预览
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -349,7 +482,11 @@ export function ReviewChangesPanel({ target, onClose }: { target: ReviewChangesT
                       {fileError}
                     </div>
                   )}
-                  {file && <CodeViewer file={file} mode={viewMode} />}
+                  {file && (
+                    viewMode === 'preview' && selectedIsMarkdown
+                      ? <MarkdownViewer file={file} />
+                      : <CodeViewer file={file} mode={viewMode} />
+                  )}
                 </div>
               ) : (
                 <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-warm-border bg-white px-3 py-6 text-center text-[11px] text-warm-text-secondary">

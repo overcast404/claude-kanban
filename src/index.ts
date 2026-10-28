@@ -9,6 +9,7 @@ import { hooksRouter } from './routes/hooks';
 import { filesystemRouter } from './routes/filesystem';
 import { networkRouter } from './routes/network';
 import { chatRouter } from './routes/chat';
+import { recoverCompletedRunningTasks } from './services/session-manager';
 import { setBroadcast } from './broadcast';
 import { WsMessage } from './types';
 
@@ -70,6 +71,7 @@ export function createApp(config: AppConfig) {
 
       setBroadcast(broadcast);
       initDatabase();
+      recoverCompletedRunningTasks();
 
       resolve({ server, url: `http://localhost:${port}` });
     });

@@ -17,19 +17,41 @@ const runningProcesses = new Map<string, ChildProcess>();
 const recentOutput = new Map<string, string>();
 const stopRequests = new Map<string, Promise<boolean>>();
 
-interface DecisionOption {
-  label: string;
-  description?: string;
-}
-
 interface ParsedRunOutput {
   resultText: string | null;
   lastAssistantText: string | null;
 }
 
-type ExitOutcome =
-  | { kind: 'reviewing' }
-  | { kind: 'needs_decision'; question: string; options: DecisionOption[]; context: string };
+function isCompletionResultLine(line: string): boolean {
+  try {
+    const obj = JSON.parse(line) as any;
+    if (obj?.type !== 'result' || obj?.is_error === true || typeof obj?.result !== 'string') return false;
+    return obj.subtype === 'success' || obj.stop_reason === 'end_turn' || obj.terminal_reason === 'completed';
+  } catch {
+    return false;
+  }
+}
+
+function consumeCompletionResultLines(buffer: string, text: string, onCompletion: () => void): string {
+  const combined = buffer + text;
+  const lines = combined.split('\n');
+  const remainder = lines.pop() ?? '';
+
+  for (const line of lines) {
+    if (isCompletionResultLine(line.trim())) onCompletion();
+  }
+
+  if (isCompletionResultLine(remainder.trim())) {
+    onCompletion();
+    return '';
+  }
+
+  return remainder;
+}
+
+function hasCompletionResult(stdout: string): boolean {
+  return stdout.split('\n').some(line => isCompletionResultLine(line.trim()));
+}
 
 export function getRecentOutput(taskId: string): string {
   return recentOutput.get(taskId) || '';
@@ -127,6 +149,27 @@ function ensureWorktree(workingDir: string, taskId: string): string | null {
 
 export function getRunningCount(): number {
   return runningProcesses.size;
+}
+
+export function recoverCompletedRunningTasks(): void {
+  const db = getDb();
+  const rows = db.prepare(`SELECT id FROM tasks WHERE status = 'running'`).all() as { id: string }[];
+  const logsDir = path.join(getDataDir(), 'logs');
+
+  for (const row of rows) {
+    const logFile = path.join(logsDir, `${row.id}.log`);
+    if (!fs.existsSync(logFile)) continue;
+
+    try {
+      const stdout = fs.readFileSync(logFile, 'utf8');
+      if (!hasCompletionResult(stdout)) continue;
+
+      console.log(`[SessionManager] Recovering completed running task ${row.id} from result log`);
+      checkAndHandleCompletion(row.id, stdout).catch(console.error);
+    } catch (e) {
+      console.error(`[SessionManager] Failed to recover running task ${row.id}:`, (e as Error).message);
+    }
+  }
 }
 
 const GRACEFUL_SHUTDOWN_MS = 5000;
@@ -285,6 +328,8 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
 
   let stdout = '';
   let stderr = '';
+  let stdoutLineBuffer = '';
+  let completionHandled = false;
   let seqCounter = 0;
   const logsDir = path.join(getDataDir(), 'logs');
   if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
@@ -317,9 +362,19 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     }
   }
 
+  function handleCompletionResult(): void {
+    if (completionHandled) return;
+    completionHandled = true;
+    console.log(`[SessionManager] Task ${task.id} emitted a completion result — marking as reviewing before process close`);
+    if (runningProcesses.get(task.id) === proc) runningProcesses.delete(task.id);
+    recentOutput.delete(task.id);
+    checkAndHandleCompletion(task.id, stdout).catch(console.error);
+  }
+
   proc.stdout?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
     stdout += text;
+    stdoutLineBuffer = consumeCompletionResultLines(stdoutLineBuffer, text, handleCompletionResult);
     recentOutput.set(task.id, stdout.slice(-5000));
     pendingChunks.push({ stream: 'stdout', text });
     if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; flushChunks(); }, 100);
@@ -338,13 +393,13 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
     if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     flushChunks();
 
-    runningProcesses.delete(task.id);
+    if (runningProcesses.get(task.id) === proc) runningProcesses.delete(task.id);
     recentOutput.delete(task.id);
 
     const currentTask = db.prepare('SELECT status FROM tasks WHERE id = ?').get(task.id) as { status: string } | undefined;
     if (currentTask?.status === 'stopped' || isStopRequested(task.id)) {
       console.log(`[SessionManager] Task ${task.id} was stopped by user, skipping completion check`);
-    } else {
+    } else if (!completionHandled) {
       checkAndHandleCompletion(task.id, stdout).catch(console.error);
     }
 
@@ -354,7 +409,7 @@ async function launchSession(task: Task, workingDir: string): Promise<void> {
 
   proc.on('error', (err) => {
     console.error(`[SessionManager] Task ${task.id} error:`, err.message);
-    runningProcesses.delete(task.id);
+    if (runningProcesses.get(task.id) === proc) runningProcesses.delete(task.id);
     db.prepare(`UPDATE tasks SET status = 'pending', updated_at = datetime('now') WHERE id = ?`).run(task.id);
   });
 
@@ -439,139 +494,12 @@ function parseRunOutput(stdout: string): ParsedRunOutput {
   return { resultText, lastAssistantText };
 }
 
-function normalizeText(text: string): string {
-  return text.replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
-}
-
-function extractQuestionText(text: string): string {
-  const chunks = text
-    .split(/\n{2,}/)
-    .map(chunk => chunk.trim())
-    .filter(Boolean);
-
-  for (let i = chunks.length - 1; i >= 0; i--) {
-    if (looksLikeDecisionRequest(chunks[i], false)) return chunks[i];
-  }
-
-  return text.trim();
-}
-
-function extractDecisionOptions(text: string): DecisionOption[] {
-  const options: DecisionOption[] = [];
-  const seen = new Set<string>();
-
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
-    const match = trimmed.match(/^(?:[-*]\s*)?(?:\d+[\).、]|[A-Da-d][\).、]|方案\s*[A-Da-d一二三四五六]?[:：、.]?|选项\s*[A-Da-d一二三四五六]?[:：、.]?)\s*(.+)$/);
-    if (!match) continue;
-
-    const label = match[1].trim().replace(/\s+/g, ' ');
-    if (label.length < 1 || label.length > 120 || seen.has(label)) continue;
-
-    seen.add(label);
-    options.push({ label });
-  }
-
-  if (options.length >= 2 && options.length <= 8) return options;
-
-  if (/(是否|要不要|能否|可否|是否需要|do you want|would you like|should i)/i.test(text)) {
-    return [{ label: '是' }, { label: '否' }];
-  }
-
-  return [];
-}
-
-function looksCompletionLike(text: string): boolean {
-  return [
-    /(^|\s)(done|completed|finished|ready for review|summary)\b/i,
-    /(已完成|完成了|任务完成|可以验收|请验收|测试通过|构建通过|实现完成|修改完成|处理完毕)/,
-  ].some(pattern => pattern.test(text));
-}
-
-function looksLikeReviewConfirmation(text: string): boolean {
-  return [
-    /(请确认|请检查|是否).{0,30}(验收|满意|通过|符合|完成|可以)/,
-    /(please\s+(review|verify|confirm)|ready for review)/i,
-  ].some(pattern => pattern.test(text));
-}
-
-function looksLikeDecisionRequest(text: string, suppressCompletion = true): boolean {
-  const normalized = normalizeText(text);
-  if (!normalized) return false;
-
-  const hasQuestionMark = /[?？]/.test(normalized);
-  const options = extractDecisionOptions(normalized);
-  const hasOptions = options.length >= 2;
-  const hasExplicitRequest = [
-    /(请选择|请确认|请决定|请提供|请补充|请回复|请告诉我|需要你|麻烦你|等待你)/,
-    /(please\s+(choose|confirm|decide|provide|select|reply)|waiting for you)/i,
-  ].some(pattern => pattern.test(normalized));
-  const hasDecisionTopic = [
-    /(选择|确认|决定|提供|补充|回复|输入|采用哪个|选哪个|是否|要不要|能否|可否)/,
-    /(choose|confirm|decide|provide|select|which|should i|do you want|would you like)/i,
-  ].some(pattern => pattern.test(normalized));
-  const hasContinueSignal = /(继续前|为了继续|下一步|才能继续|awaiting|before continuing|to continue)/i.test(normalized);
-
-  if (suppressCompletion && looksCompletionLike(normalized) && !hasOptions && !hasContinueSignal && looksLikeReviewConfirmation(normalized)) {
-    return false;
-  }
-
-  if (suppressCompletion && looksCompletionLike(normalized) && !hasExplicitRequest && !hasContinueSignal) {
-    return false;
-  }
-
-  return (hasOptions && (hasExplicitRequest || hasQuestionMark || hasContinueSignal))
-    || (hasQuestionMark && (hasExplicitRequest || hasDecisionTopic))
-    || (hasContinueSignal && (hasExplicitRequest || hasDecisionTopic));
-}
-
-function classifyExitOutcome(stdout: string): ExitOutcome {
-  const parsed = parseRunOutput(stdout);
-  const candidate = parsed.resultText || parsed.lastAssistantText || '';
-  const context = normalizeText(candidate).slice(-4000);
-
-  if (!looksLikeDecisionRequest(context)) return { kind: 'reviewing' };
-
-  const question = extractQuestionText(context).slice(-2000);
-  return {
-    kind: 'needs_decision',
-    question,
-    options: extractDecisionOptions(question),
-    context,
-  };
-}
-
-function createFallbackDecision(taskId: string, outcome: Extract<ExitOutcome, { kind: 'needs_decision' }>): void {
-  const db = getDb();
-  db.prepare(`INSERT INTO decisions (id, task_id, context, question, options)
-    VALUES (?, ?, ?, ?, ?)`).run(
-    uuid(),
-    taskId,
-    outcome.context,
-    outcome.question,
-    JSON.stringify(outcome.options)
-  );
-
-  db.prepare(`UPDATE tasks SET status = 'deciding', updated_at = datetime('now') WHERE id = ?`).run(taskId);
-
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
-  const decision = db.prepare('SELECT * FROM decisions WHERE task_id = ? AND answer IS NULL ORDER BY created_at DESC LIMIT 1').get(taskId);
-  broadcast({ type: 'decision_created', payload: { task, decision } });
-}
-
 async function checkAndHandleCompletion(taskId: string, stdout: string): Promise<void> {
   const db = getDb();
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId) as Task | undefined;
   if (!task) return;
 
   if (task.status === 'deciding' || task.status === 'reviewing' || task.status === 'done' || task.status === 'pending' || task.status === 'stopped') return;
-
-  const outcome = classifyExitOutcome(stdout);
-  if (outcome.kind === 'needs_decision') {
-    console.log(`[SessionManager] Task ${taskId} exited with an unstructured question — marking as deciding`);
-    createFallbackDecision(taskId, outcome);
-    return;
-  }
 
   const summary = extractSummary(stdout);
 
@@ -588,7 +516,7 @@ async function checkAndHandleCompletion(taskId: string, stdout: string): Promise
     console.error(`[SessionManager] Failed to capture checkpoint commit for task ${taskId}:`, (e as Error).message);
   }
 
-  console.log(`[SessionManager] Task ${taskId} exited without signal — marking as reviewing, stdout=${stdout.length}B, summary="${summary.slice(0, 80)}", commit=${checkpointCommit?.slice(0, 8)}`);
+  console.log(`[SessionManager] Task ${taskId} completed without AskUserQuestion — marking as reviewing, stdout=${stdout.length}B, summary="${summary.slice(0, 80)}", commit=${checkpointCommit?.slice(0, 8)}`);
   db.prepare(`UPDATE tasks SET status = 'reviewing', summary = ?, checkpoint_commit = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(summary, checkpointCommit, taskId);
 
@@ -641,6 +569,8 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
   runningProcesses.set(taskId, proc);
 
   let resumeStdout = '';
+  let resumeStdoutLineBuffer = '';
+  let completionHandled = false;
   const logsDir = path.join(getDataDir(), 'logs');
   if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
   const logFile = path.join(logsDir, `${taskId}.log`);
@@ -673,9 +603,19 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     }
   }
 
+  function handleCompletionResult(): void {
+    if (completionHandled) return;
+    completionHandled = true;
+    console.log(`[SessionManager] Resume for task ${taskId} emitted a completion result — marking as reviewing before process close`);
+    if (runningProcesses.get(taskId) === proc) runningProcesses.delete(taskId);
+    recentOutput.delete(taskId);
+    checkAndHandleCompletion(taskId, resumeStdout).catch(console.error);
+  }
+
   proc.stdout?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
     resumeStdout += text;
+    resumeStdoutLineBuffer = consumeCompletionResultLines(resumeStdoutLineBuffer, text, handleCompletionResult);
     recentOutput.set(taskId, resumeStdout.slice(-5000));
     pendingChunks.push({ stream: 'stdout', text });
     if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; flushChunks(); }, 100);
@@ -691,13 +631,13 @@ export async function resumeSession(taskId: string, workingDir: string, injectMe
     console.log(`[SessionManager] Resume for task ${taskId} exited with code ${code}`);
     if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     flushChunks();
-    runningProcesses.delete(taskId);
+    if (runningProcesses.get(taskId) === proc) runningProcesses.delete(taskId);
     recentOutput.delete(taskId);
 
     const currentTask = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string } | undefined;
     if (currentTask?.status === 'stopped' || isStopRequested(taskId)) {
       console.log(`[SessionManager] Task ${taskId} was stopped by user during resume, skipping completion check`);
-    } else {
+    } else if (!completionHandled) {
       checkAndHandleCompletion(taskId, resumeStdout).catch(console.error);
     }
 
